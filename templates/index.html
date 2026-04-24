@@ -275,7 +275,7 @@ tr:hover td{background:var(--accent-bg)}
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)">
           <input type="checkbox" id="smsEnabled" {{ 'checked' if config.get('sms_enabled') }} style="width:18px;height:18px;accent-color:var(--accent)">
-          SMS-notiser (46elks)
+          SMS-notiser
         </label>
       </div>
       <div id="smsFields" style="display:none">
@@ -283,19 +283,11 @@ tr:hover td{background:var(--accent-bg)}
           <div class="field"><label>Telefonnummer</label>
             <input type="tel" id="smsTo" placeholder="+46XXXXXXXXX" value="{{ config.get('sms_to','') }}">
           </div>
-          <div class="field"><label>46elks API-användarnamn</label>
-            <input type="text" id="smsUser" placeholder="u..." value="{{ config.get('sms_api_username','') }}">
-          </div>
-        </div>
-        <div class="card-row" style="margin-bottom:10px">
-          <div class="field"><label>46elks API-lösenord</label>
-            <input type="password" id="smsPass" placeholder="Lösenord" value="{{ config.get('sms_api_password','') }}">
-          </div>
           <div class="field" style="justify-content:flex-end">
             <button class="btn btn-go btn-sm" onclick="testSms()" id="smsTestBtn" style="align-self:flex-end">Skicka test-SMS</button>
           </div>
         </div>
-        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">Skapa konto på <a href="https://46elks.com" target="_blank" style="color:var(--accent)">46elks.com</a> och hämta dina API-uppgifter under Dashboard.</p>
+        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">Ange ditt mobilnummer i internationellt format (+46...) för att få SMS när lediga tider hittas.</p>
       </div>
     </div>
 
@@ -566,8 +558,7 @@ function saveCfg(){
   return fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
     locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,mode:scanMode,
-    sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value,
-    sms_api_username:document.getElementById('smsUser').value,sms_api_password:document.getElementById('smsPass').value
+    sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value
   })});
 }
 

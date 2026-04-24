@@ -122,6 +122,8 @@ def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
             auth=(api_user, api_pass),
             data={"from": "Provbok", "to": to, "message": message},
             timeout=15,
+            proxies={"http": None, "https": None},
+            verify=False,
         )
         return {"ok": r.status_code == 200, "status": r.status_code, "data": r.text}
     except Exception as e:
@@ -204,8 +206,6 @@ def save_config_route():
     config["mode"] = data.get("mode", "manual")
     config["sms_enabled"] = data.get("sms_enabled", False)
     config["sms_to"] = data.get("sms_to", "").strip()
-    config["sms_api_username"] = data.get("sms_api_username", "").strip()
-    config["sms_api_password"] = data.get("sms_api_password", "").strip()
     save_config_file(config)
     return jsonify({"status": "ok"})
 
