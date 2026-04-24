@@ -365,6 +365,9 @@ def api_scan():
     else:
         scan_ids = all_ids
 
+    app.logger.info("Scanning location IDs: %s (licence=%s, exam=%s/%s)",
+                     scan_ids, licence_type, exam_type, exam_type_id)
+
     # Parallel scan using thread pool
     collected = []
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -380,6 +383,11 @@ def api_scan():
 
     # Filter by date range
     collected = [t for t in collected if date_from <= t["date"] <= date_to]
+
+    # Filter by selected locations (API may return nearby/unrelated locations)
+    if selected_locs:
+        collected = [t for t in collected if t.get("location", "").lower() in selected_locs]
+
     collected.sort(key=lambda t: t["date"] + t["time"])
 
     # Compute changes vs previous snapshot
