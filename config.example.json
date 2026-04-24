@@ -1,0 +1,13 @@
+{
+    "swedish_ssn": "YYYYMMDDXXXX",
+    "licence_type": "A",
+    "exam_type": "Körprov",
+    "locations": [
+        "Västerhaninge",
+        "Gillinge Trafikövningsplats"
+    ],
+    "check_interval_seconds": 300,
+    "date_from": "2026-04-27",
+    "date_to": "2026-12-31",
+    "mode": "manual"
+}

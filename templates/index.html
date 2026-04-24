@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Provbokningsbevakning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f9fb;
+  --card:#ffffff;
+  --card2:#f1f3f7;
+  --border:#e2e5eb;
+  --border2:#d0d4dc;
+  --accent:#4f46e5;
+  --accent2:#6366f1;
+  --accent-bg:rgba(79,70,229,.07);
+  --accent-border:rgba(79,70,229,.2);
+  --green:#16a34a;
+  --green-bg:rgba(22,163,74,.08);
+  --green-border:rgba(22,163,74,.2);
+  --red:#dc2626;
+  --red-bg:rgba(220,38,38,.06);
+  --red-border:rgba(220,38,38,.18);
+  --yellow:#d97706;
+  --yellow-bg:rgba(217,119,6,.08);
+  --text:#1e293b;
+  --text2:#475569;
+  --text3:#94a3b8;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.05);
+  --shadow-lg:0 10px 30px rgba(0,0,0,.08),0 2px 8px rgba(0,0,0,.04);
+  --radius:16px;
+  --radius-sm:10px;
+}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+.app{max-width:960px;margin:0 auto;padding:24px 20px 80px}
+
+/* Header */
+.hdr{text-align:center;padding:32px 0 12px}
+.hdr h1{font-size:1.6rem;color:var(--text);font-weight:700;letter-spacing:-.03em}
+.hdr p{color:var(--text3);font-size:.88rem;margin-top:6px;font-weight:400}
+
+/* Status bar */
+.status-bar{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin:18px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:var(--shadow)}
+.st-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.st-dot.on{background:var(--green);box-shadow:0 0 0 3px var(--green-bg)}.st-dot.off{background:var(--text3)}
+.st-lbl{font-weight:600;font-size:.9rem;color:var(--text)}.st-lbl span{color:var(--text2);font-weight:400}
+.st-right{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:.84rem;color:var(--text2)}
+.st-right .tmr{font-family:'SF Mono',ui-monospace,monospace;font-size:.95rem;color:var(--text);font-weight:600;background:var(--card2);padding:4px 10px;border-radius:6px}
+.ctrl{display:flex;gap:8px;align-items:center}
+
+/* Buttons */
+.btn{padding:8px 20px;border:none;border-radius:8px;font-size:.86rem;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.btn-go{background:var(--accent);color:#fff}.btn-go:hover{background:var(--accent2);box-shadow:0 2px 8px rgba(79,70,229,.25)}.btn-go:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
+.btn-st{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}.btn-st:hover{background:rgba(220,38,38,.1)}.btn-st:disabled{opacity:.35;cursor:not-allowed}
+.btn-bk{background:var(--green);color:#fff;font-size:1rem;padding:12px 32px;border-radius:var(--radius-sm)}.btn-bk:hover{background:#15803d;box-shadow:0 2px 8px rgba(22,163,74,.25)}
+.btn-dm{background:var(--card2);color:var(--text2);border:1px solid var(--border);padding:12px 24px;border-radius:var(--radius-sm);font-size:1rem}.btn-dm:hover{background:var(--border);color:var(--text)}
+.btn-sm{padding:6px 14px;font-size:.8rem}
+
+/* Mode toggle */
+.mode-tg{display:flex;background:var(--card2);border-radius:8px;border:1px solid var(--border);overflow:hidden}
+.mode-b{padding:6px 14px;font-size:.8rem;font-weight:600;color:var(--text3);background:transparent;border:none;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+.mode-b.on{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(79,70,229,.2)}
+
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card h3{font-size:.82rem;color:var(--text3);font-weight:600;margin-bottom:14px;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:8px}
+.card-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:600px){.card-row{grid-template-columns:1fr}}
+
+/* Form */
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:.75rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.field input,.field select{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:.9rem;font-family:inherit;transition:border-color .15s}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+
+/* Collapsible */
+.coll-h{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+.coll-h .arr{transition:transform .2s;color:var(--text3);font-size:.75rem}
+.coll-h .arr.open{transform:rotate(180deg)}
+.coll-b{display:none;padding-top:14px}.coll-b.open{display:block}
+
+/* Location Browser */
+.loc-browser{margin-top:8px}
+.loc-search{position:relative;margin-bottom:16px}
+.loc-search input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 16px 11px 40px;color:var(--text);font-size:.9rem;font-family:inherit}
+.loc-search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.loc-search .icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:.92rem}
+.loc-selected-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.loc-tag{background:var(--accent-bg);color:var(--accent);padding:5px 12px;border-radius:20px;font-size:.82rem;font-weight:600;display:flex;align-items:center;gap:6px;border:1px solid var(--accent-border)}
+.loc-tag .x{cursor:pointer;font-size:.88rem;line-height:1;color:var(--accent);opacity:.6}.loc-tag .x:hover{opacity:1;color:var(--red)}
+.region-group{margin-bottom:18px}
+.region-hdr{font-size:.78rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:6px 0;margin-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.region-hdr .cnt{font-weight:400;color:var(--text3);font-size:.74rem}
+.loc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:8px}
+.loc-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:8px;font-size:.88rem}
+.loc-card:hover{border-color:var(--accent-border);background:var(--accent-bg);transform:translateY(-1px);box-shadow:var(--shadow)}
+.loc-card.sel{border-color:var(--accent);background:var(--accent-bg)}
+.loc-card .ck{width:18px;height:18px;border:1.5px solid var(--border2);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;transition:all .15s}
+.loc-card.sel .ck{background:var(--accent);border-color:var(--accent);color:#fff}
+.loc-card .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.loc-card .badge-times{font-size:.7rem;background:var(--green-bg);color:var(--green);padding:2px 7px;border-radius:10px;font-weight:600;white-space:nowrap}
+
+/* Scan progress */
+.scanp{margin-top:12px;display:none}.scanp.on{display:block}
+.scanp-bar{background:var(--card2);border-radius:6px;height:4px;overflow:hidden;margin-top:6px}
+.scanp-fill{background:linear-gradient(90deg,var(--accent),var(--green));height:100%;width:0%;transition:width .3s;border-radius:6px}
+.scanp-txt{font-size:.78rem;color:var(--text3);display:flex;justify-content:space-between}
+
+/* Reservation */
+.res-card{background:var(--card);border:2px solid var(--accent);border-radius:var(--radius);padding:30px;margin:18px 0;text-align:center;animation:sUp .4s ease;box-shadow:var(--shadow-md)}
+@keyframes sUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.res-card .badge{display:inline-block;background:var(--green-bg);color:var(--green);padding:6px 16px;border-radius:20px;font-size:.82rem;font-weight:700;margin-bottom:14px;border:1px solid var(--green-border)}
+.res-card .dt{font-size:1.35rem;font-weight:700;color:var(--text);margin-bottom:5px}
+.res-card .loc{font-size:1.05rem;color:var(--text2);margin-bottom:18px}
+.res-card .cd{display:flex;align-items:center;justify-content:center;gap:8px;font-size:.88rem;color:var(--yellow);margin-bottom:20px;font-weight:600}
+.res-card .cd .t{font-family:'SF Mono',ui-monospace,monospace;font-size:1.25rem}
+.res-card .acts{display:flex;gap:12px;justify-content:center}
+.res-card .cost{font-size:.82rem;color:var(--text3);margin-top:10px}
+.res-exp{opacity:.6;border-color:var(--border)}.res-exp .badge{background:var(--red-bg);color:var(--red);border-color:var(--red-border)}
+
+/* Stats */
+.stats{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px 18px;flex:1;min-width:90px;text-align:center;box-shadow:var(--shadow)}
+.stat .n{font-size:1.5rem;font-weight:700;color:var(--accent)}.stat .l{font-size:.72rem;color:var(--text3);margin-top:3px;font-weight:500}
+.stat.grn .n{color:var(--green)}.stat.red .n{color:var(--red)}
+
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:14px}
+.tab{padding:10px 18px;background:none;border:none;color:var(--text3);font-size:.84rem;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;font-family:inherit}
+.tab:hover{color:var(--text2)}.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tp{display:none}.tp.on{display:block}
+
+/* Slot view */
+.sday{background:var(--card);border-radius:var(--radius-sm);border:1px solid var(--border);overflow:hidden;margin-bottom:12px;box-shadow:var(--shadow)}
+.sday-h{padding:10px 16px;background:var(--card2);font-weight:600;font-size:.88rem;color:var(--accent);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)}
+.sday-h .c{background:var(--bg);color:var(--text3);padding:2px 9px;border-radius:10px;font-size:.76rem;font-weight:500}
+.slocs{padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.sloc-nm{font-size:.78rem;color:var(--text3);font-weight:600;margin-bottom:5px}
+.stimes{display:flex;flex-wrap:wrap;gap:7px}
+.schip{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 14px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;transition:all .15s;min-width:82px}
+.schip:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow-md);background:var(--card)}
+.schip .t{font-weight:700;color:var(--text);font-size:.92rem}.schip .c{font-size:.7rem;color:var(--text3)}.schip .n{font-size:.66rem;color:var(--text3)}
+.schip.fresh{border-color:var(--green-border);background:var(--green-bg)}.schip.fresh .t{color:var(--green)}
+
+/* Table */
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+th{text-align:left;padding:9px 14px;background:var(--card2);color:var(--text3);font-weight:600;font-size:.74rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border);position:sticky;top:0}
+td{padding:9px 14px;border-bottom:1px solid var(--border);color:var(--text2)}
+tr:hover td{background:var(--accent-bg)}
+.scrl{max-height:500px;overflow-y:auto;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--card)}
+
+/* Log */
+.logi{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.logi:last-child{border:none}
+.logi .dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+.logi .dot.bk{background:var(--accent)}.logi .dot.dm{background:var(--text3)}
+.logi .txt{flex:1;color:var(--text2)}.logi .txt b{color:var(--text);font-weight:600}
+.logi .tm{font-size:.75rem;color:var(--text3)}
+
+/* Filter */
+.flt{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.flt select{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:.84rem;min-width:170px;font-family:inherit}
+.flt label{font-size:.78rem;color:var(--text3);font-weight:500}
+
+.empty{text-align:center;padding:40px;color:var(--text3);font-size:.88rem}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:14px 22px;border-radius:var(--radius-sm);font-weight:600;display:none;z-index:999;animation:sUp .3s;box-shadow:var(--shadow-lg);font-size:.88rem}
+.toast.ok{border-left:4px solid var(--green)}.toast.err{border-left:4px solid var(--red)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:600px){
+  .app{padding:16px 12px 80px}
+  .status-bar{flex-direction:column;align-items:flex-start;gap:10px}
+  .st-right{margin-left:0;width:100%;justify-content:space-between}
+  .loc-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+  .res-card{padding:22px 14px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- BankID Login Overlay -->
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(12px)">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:40px;max-width:380px;width:90%;text-align:center;box-shadow:var(--shadow-lg)">
+    <div style="font-size:2rem;margin-bottom:12px">&#x1F194;</div>
+    <h2 style="color:var(--text);margin-bottom:8px;font-size:1.2rem;font-weight:700">Logga in med BankID</h2>
+    <p style="color:var(--text3);font-size:.85rem;margin-bottom:20px">Du behöver logga in med BankID för att söka lediga provtider hos Trafikverket.</p>
+    <div id="qrArea" style="display:flex;justify-content:center;margin-bottom:16px;min-height:40px"></div>
+    <div id="loginSpinner" style="display:none;margin:16px 0">
+      <div style="width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto"></div>
+    </div>
+    <p id="loginMsg" style="color:var(--text2);font-size:.88rem;margin-bottom:16px"></p>
+    <a id="bankidLink" href="#" style="display:none;color:var(--accent);font-size:.85rem;margin-bottom:16px;text-decoration:underline;font-weight:500" target="_blank">Öppna BankID på denna enhet</a>
+    <div style="margin-top:8px">
+      <button class="btn btn-go" onclick="beginAuth()" style="width:100%;justify-content:center;padding:12px 24px;font-size:.92rem">Starta BankID-inloggning</button>
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="hdr">
+  <h1>Provbokningsbevakning</h1>
+  <p>Sök lediga körkortsprov och boka automatiskt</p>
+</div>
+
+<!-- Status Bar -->
+<div class="status-bar">
+  <div class="st-dot off" id="stDot"></div>
+  <div class="st-lbl">Status: <span id="stTxt">Stoppad</span></div>
+  <div class="ctrl">
+    <button class="btn btn-go" id="goBtn" onclick="startScanner()" disabled>Starta</button>
+    <button class="btn btn-st" id="stBtn" onclick="stopScanner()" disabled>Stoppa</button>
+  </div>
+  <div class="mode-tg">
+    <button class="mode-b on" id="mMan" onclick="setMode('manual')">Meddela mig</button>
+    <button class="mode-b" id="mAuto" onclick="setMode('auto')">Autobokning</button>
+  </div>
+  <div class="st-right">
+    <span id="authStatus" style="font-size:.82rem;font-weight:500">Kontrollerar...</span>
+    <button class="btn btn-sm btn-st" id="logoutBtn" onclick="doLogout()" style="display:none;padding:5px 12px;font-size:.78rem">Logga ut</button>
+    <div class="tmr" id="tmr">00:00:00</div>
+    <div id="scCnt" style="font-size:.82rem;color:var(--text3)">0 sökningar</div>
+  </div>
+</div>
+
+<!-- Reservation -->
+<div id="resArea"></div>
+
+<!-- Scan progress -->
+<div class="scanp" id="scanp">
+  <div class="scanp-txt"><span id="scLbl">Skannar...</span><span id="scN">0/0</span></div>
+  <div class="scanp-bar"><div class="scanp-fill" id="scFill"></div></div>
+</div>
+
+<!-- Settings -->
+<div class="card">
+  <div class="coll-h" onclick="togSett()">
+    <h3 style="margin:0">Inställningar</h3>
+    <span class="arr open" id="sArr">&#9660;</span>
+  </div>
+  <div class="coll-b open" id="sBody">
+    <div class="card-row" style="margin-bottom:12px">
+      <div class="field"><label>Personnummer</label>
+        <input type="text" id="ssn" placeholder="YYYYMMDDXXXX" value="{{ config.swedish_ssn if config.swedish_ssn != 'YYYYMMDD-XXXX' else '' }}" maxlength="13">
+      </div>
+      <div class="field"><label>Körkort</label>
+        <select id="licenceType" onchange="loadLocDetails()">
+          <option value="B" {{ 'selected' if config.get('licence_type','B') == 'B' }}>B - Personbil</option>
+          <option value="A" {{ 'selected' if config.get('licence_type','B') == 'A' }}>A - Motorcykel</option>
+          <option value="A2" {{ 'selected' if config.get('licence_type','B') == 'A2' }}>A2 - MC (Begränsad)</option>
+          <option value="A1" {{ 'selected' if config.get('licence_type','B') == 'A1' }}>A1 - Lätt MC</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-row" style="margin-bottom:12px">
+      <div class="field"><label>Provtyp</label>
+        <select id="examType" onchange="loadLocDetails()">
+          <option value="Körprov" {{ 'selected' if config.exam_type == 'Körprov' }}>Körprov</option>
+          <option value="Kunskapsprov" {{ 'selected' if config.exam_type == 'Kunskapsprov' }}>Kunskapsprov</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-row" style="margin-bottom:16px">
+      <div class="field"><label>Från datum</label><input type="date" id="dtFrom" value="{{ config.date_from }}"></div>
+      <div class="field"><label>Till datum</label><input type="date" id="dtTo" value="{{ config.date_to }}"></div>
+    </div>
+
+    <!-- Location Browser -->
+    <h3>Välj orter <span style="font-weight:400;color:var(--text3);text-transform:none;font-size:.8rem">(lämna tomt = alla)</span></h3>
+    <div class="loc-browser">
+      <div class="loc-search">
+        <span class="icon" style="color:var(--text3)">&#128269;</span>
+        <input type="text" id="locQ" placeholder="Sök ort..." oninput="filterLocBrowser()">
+      </div>
+      <div class="loc-selected-bar" id="selBar"></div>
+      <div id="locBrowser"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Results -->
+<div id="resSec" style="display:none">
+  <div class="stats">
+    <div class="stat"><div class="n" id="nAll">0</div><div class="l">Lediga tider</div></div>
+    <div class="stat grn"><div class="n" id="nNew">0</div><div class="l">Nya (avbokade)</div></div>
+    <div class="stat"><div class="n" id="nLoc">0</div><div class="l">Platser</div></div>
+  </div>
+  <div class="tabs">
+    <button class="tab on" onclick="swTab('slots',this)">Tidöversikt</button>
+    <button class="tab" onclick="swTab('table',this)">Tabell</button>
+    <button class="tab" onclick="swTab('log',this)">Aktivitet</button>
+  </div>
+  <div class="tp on" id="p-slots">
+    <div class="flt"><label>Plats:</label><select id="slotF" onchange="renderSlots()"><option value="">Alla</option></select></div>
+    <div id="slotsC"><div class="empty">Tryck Starta för att söka</div></div>
+  </div>
+  <div class="tp" id="p-table">
+    <div class="flt"><label>Plats:</label><select id="tblF" onchange="renderTbl()"><option value="">Alla</option></select></div>
+    <div class="scrl"><table><thead><tr><th>Datum</th><th>Tid</th><th>Plats</th><th>Prov</th><th>Kostnad</th></tr></thead><tbody id="tblB"></tbody></table></div>
+  </div>
+  <div class="tp" id="p-log">
+    <div id="logL"><div class="empty">Ingen aktivitet ännu</div></div>
+  </div>
+</div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+/* ── State ── */
+var EIDS={'Körprov':12,'Kunskapsprov':3};
+var LICENCE_PARAMS={'B':{lid:5,eids:{'Körprov':12,'Kunskapsprov':3}},'A':{lid:4,eids:{'Körprov':10,'Kunskapsprov':2}},'A1':{lid:2,eids:{'Körprov':10,'Kunskapsprov':2}},'A2':{lid:24,eids:{'Körprov':10,'Kunskapsprov':2}}};
+var allTimes=[],addedTimes=[];
+var selLocs={{ config.locations | tojson }};
+var locDetails=[];
+var locTimeCounts={};
+var scanMode='{{ config.get("mode","manual") }}'||'manual';
+var running=false,totalSearches=0,startTm=null,tmrI=null,activeRes=null;
+var authenticated=false;
+
+function esc(s){if(!s)return'';var d=document.createElement('div');d.appendChild(document.createTextNode(String(s)));return d.innerHTML}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+
+/* ── Notifications ── */
+var notifPermission='default';
+function requestNotifPermission(){
+  if(!('Notification' in window))return;
+  notifPermission=Notification.permission;
+  if(notifPermission==='default'){
+    Notification.requestPermission().then(function(p){notifPermission=p});
+  }
+}
+function sendNotification(title,body,urgent){
+  // Browser notification (works when tab is background/minimized)
+  if('Notification' in window && notifPermission==='granted'){
+    try{
+      var n=new Notification(title,{body:body,icon:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">&#x1F3CD;</text></svg>',tag:'slot-found',requireInteraction:urgent||false});
+      n.onclick=function(){window.focus();n.close()};
+    }catch(e){}
+  }
+  // Audio alert
+  playAlert();
+}
+function playAlert(){
+  try{
+    var ctx=new(window.AudioContext||window.webkitAudioContext)();
+    [660,880,660].forEach(function(freq,i){
+      var osc=ctx.createOscillator();
+      var gain=ctx.createGain();
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.type='sine';osc.frequency.value=freq;
+      gain.gain.value=0.3;
+      osc.start(ctx.currentTime+i*0.2);
+      osc.stop(ctx.currentTime+i*0.2+0.15);
+    });
+  }catch(e){}
+}
+
+/* ── Init ── */
+(function(){setMode(scanMode);loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission()})();
+
+/* ── BankID Authentication ── */
+var authPollTimer=null;
+
+function checkAuth(){
+  fetch('/api/auth/check').then(function(r){return r.json()}).then(function(d){
+    if(d.authenticated){authenticated=true;hideLogin();updateAuthUI()}
+    else{showLogin()}
+  }).catch(function(){showLogin()});
+}
+
+function showLogin(){
+  document.getElementById('loginOverlay').style.display='flex';
+  document.getElementById('goBtn').disabled=true;
+}
+function hideLogin(){
+  document.getElementById('loginOverlay').style.display='none';
+}
+function updateAuthUI(){
+  var el=document.getElementById('authStatus');
+  el.textContent=authenticated?'Inloggad':'Ej inloggad';
+  el.style.color=authenticated?'var(--green)':'var(--red)';
+  document.getElementById('goBtn').disabled=!authenticated;
+  document.getElementById('logoutBtn').style.display=authenticated?'inline-flex':'none';
+}
+
+function beginAuth(){
+  document.getElementById('loginMsg').textContent='Startar BankID...';
+  document.getElementById('qrArea').innerHTML='';
+  document.getElementById('loginSpinner').style.display='block';
+  fetch('/api/auth/begin',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+    document.getElementById('loginSpinner').style.display='none';
+    if(!d.ok){document.getElementById('loginMsg').textContent='Fel: '+d.error;return}
+    document.getElementById('loginMsg').textContent='Öppna BankID-appen och skanna QR-koden';
+    renderQR(d.qrCode);
+    document.getElementById('bankidLink').href='bankid:///?autostarttoken='+d.autostartToken+'&redirect=null';
+    document.getElementById('bankidLink').style.display='inline-flex';
+    startAuthPoll();
+  }).catch(function(e){
+    document.getElementById('loginSpinner').style.display='none';
+    document.getElementById('loginMsg').textContent='Nätverksfel: '+e;
+  });
+}
+
+function startAuthPoll(){
+  if(authPollTimer)clearInterval(authPollTimer);
+  authPollTimer=setInterval(function(){pollAuthStatus()},2000);
+}
+
+function pollAuthStatus(){
+  fetch('/api/auth/status',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+    if(!d.ok){
+      if(d.error&&d.error.indexOf('No auth')>=0){clearInterval(authPollTimer)}
+      return;
+    }
+    if(d.status==='complete'){
+      clearInterval(authPollTimer);
+      authenticated=true;
+      hideLogin();
+      updateAuthUI();
+      showT('Inloggad med BankID!');
+    }else if(d.status==='failed'||d.status==='usercancel'){
+      clearInterval(authPollTimer);
+      document.getElementById('loginMsg').textContent='BankID-autentisering misslyckades. Försök igen.';
+      document.getElementById('qrArea').innerHTML='';
+    }else{
+      document.getElementById('loginMsg').textContent='Status: '+(d.status||'polling')+'... Öppna BankID-appen och skanna QR-koden';
+      if(d.qrCode)renderQR(d.qrCode);
+    }
+  }).catch(function(){});
+}
+
+function renderQR(data){
+  var area=document.getElementById('qrArea');
+  area.innerHTML='';
+  if(typeof QRCode!=='undefined'){
+    new QRCode(area,{text:data,width:200,height:200,colorDark:'#1e293b',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.L});
+  }else{
+    area.innerHTML='<div style="padding:20px;background:var(--card2);color:var(--text);border-radius:8px;word-break:break-all;font-size:.75rem">'+esc(data)+'</div>';
+  }
+}
+
+function doLogout(){
+  fetch('/api/auth/logout',{method:'POST'}).then(function(){
+    authenticated=false;updateAuthUI();showLogin();showT('Utloggad');
+  });
+}
+
+/* ── Load location details ── */
+function loadLocDetails(){
+  fetch('/api/location_details').then(function(r){return r.json()}).then(function(d){
+    locDetails=d;renderLocBrowser();renderSelBar();
+  });
+}
+
+/* ── Location browser ── */
+function filterLocBrowser(){renderLocBrowser()}
+
+function renderLocBrowser(){
+  var c=document.getElementById('locBrowser');
+  var q=(document.getElementById('locQ').value||'').toLowerCase();
+  var regions={};
+  locDetails.forEach(function(l){
+    if(q&&l.name.toLowerCase().indexOf(q)<0&&l.region.toLowerCase().indexOf(q)<0)return;
+    if(!regions[l.region])regions[l.region]=[];
+    regions[l.region].push(l);
+  });
+  var rNames=Object.keys(regions).sort();
+  if(!rNames.length){c.innerHTML='<div class="empty">Inga orter matchar sökningen</div>';return}
+  var html='';
+  rNames.forEach(function(rn){
+    var locs=regions[rn].sort(function(a,b){return a.name.localeCompare(b.name)});
+    html+='<div class="region-group"><div class="region-hdr">'+esc(rn)+' <span class="cnt">('+locs.length+' orter)</span></div><div class="loc-grid">';
+    locs.forEach(function(l){
+      var sel=selLocs.indexOf(l.name)>=0;
+      var tc=locTimeCounts[l.name];
+      var badge=tc?'<span class="badge-times">'+tc+' tider</span>':'';
+      html+='<div class="loc-card'+(sel?' sel':'')+'" onclick="togLoc(\''+esc(l.name).replace(/'/g,"\\'")+'\')">'
+        +'<span class="ck">'+(sel?'&#10003;':'')+'</span><span class="nm">'+esc(l.name)+'</span>'+badge+'</div>';
+    });
+    html+='</div></div>';
+  });
+  c.innerHTML=html;
+}
+
+function renderSelBar(){
+  var c=document.getElementById('selBar');
+  if(!selLocs.length){c.innerHTML='';return}
+  c.innerHTML=selLocs.map(function(l){
+    return '<span class="loc-tag">'+esc(l)+'<span class="x" onclick="event.stopPropagation();rmLoc(\''+esc(l).replace(/'/g,"\\'")+'\')">&times;</span></span>';
+  }).join('');
+}
+function togLoc(nm){var i=selLocs.indexOf(nm);if(i>=0)selLocs.splice(i,1);else selLocs.push(nm);renderLocBrowser();renderSelBar()}
+function rmLoc(nm){selLocs=selLocs.filter(function(l){return l!==nm});renderLocBrowser();renderSelBar()}
+
+/* ── Mode ── */
+function setMode(m){scanMode=m;document.getElementById('mMan').classList.toggle('on',m==='manual');document.getElementById('mAuto').classList.toggle('on',m==='auto')}
+
+/* ── Settings toggle ── */
+function togSett(){document.getElementById('sBody').classList.toggle('open');document.getElementById('sArr').classList.toggle('open')}
+
+/* ── Tabs ── */
+function swTab(nm,el){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on')});
+  document.querySelectorAll('.tp').forEach(function(p){p.classList.remove('on')});
+  document.getElementById('p-'+nm).classList.add('on');el.classList.add('on');
+}
+
+/* ── Timer ── */
+function startTmr(){startTm=Date.now();tmrI=setInterval(function(){var s=Math.floor((Date.now()-startTm)/1e3);document.getElementById('tmr').textContent=String(Math.floor(s/3600)).padStart(2,'0')+':'+String(Math.floor(s%3600/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')},1e3)}
+function stopTmr(){if(tmrI)clearInterval(tmrI);tmrI=null}
+
+/* ── Save config ── */
+function saveCfg(){
+  return fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
+    locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,mode:scanMode
+  })});
+}
+
+/* ── Scanner (server-side) ── */
+async function startScanner(){
+  if(!authenticated){showT('Du måste logga in med BankID först!',true);return}
+  var ssn=document.getElementById('ssn').value.trim();
+  if(!ssn){showT('Fyll i personnummer!',true);return}
+  await saveCfg();
+  requestNotifPermission();
+  running=true;updUI('on');startTmr();totalSearches=0;
+
+  while(running){
+    document.getElementById('scanp').classList.add('on');
+    document.getElementById('scLbl').textContent='Söker lediga tider...';
+    document.getElementById('scFill').style.width='30%';
+    document.getElementById('scN').textContent='';
+
+    try{
+      var r=await fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'}});
+      var data=await r.json();
+      document.getElementById('scFill').style.width='100%';
+
+      if(!data.ok){
+        if(r.status===401){
+          authenticated=false;updateAuthUI();showLogin();
+          showT('Sessionen har gått ut. Logga in igen.',true);
+          break;
+        }
+        showT('Skanningsfel: '+(data.error||'okänt'),true);
+        if(!running)break;
+        await sleep(10000);continue;
+      }
+
+      totalSearches++;document.getElementById('scCnt').textContent=totalSearches+' sökningar';
+
+      var collected=data.times||[];
+      addedTimes=data.added||[];
+      allTimes=collected;
+
+      locTimeCounts={};collected.forEach(function(t){locTimeCounts[t.location]=(locTimeCounts[t.location]||0)+1});
+      renderLocBrowser();
+
+      var locsObj={};collected.forEach(function(t){locsObj[t.location]=true});
+      var locs=Object.keys(locsObj).sort();
+
+      document.getElementById('resSec').style.display='';
+      document.getElementById('nAll').textContent=collected.length;
+      document.getElementById('nNew').textContent=addedTimes.length;
+      document.getElementById('nLoc').textContent=locs.length;
+      popFilters(locs);renderSlots();renderTbl();
+
+      if(addedTimes.length>0){
+        var best=addedTimes.sort(function(a,b){return(a.date+a.time).localeCompare(b.date+b.time)})[0];
+        var slotDesc=best.date+' '+best.time+' — '+best.location;
+        var notifBody=addedTimes.length===1?slotDesc:addedTimes.length+' nya tider! Först: '+slotDesc;
+        sendNotification('Ledig tid hittad!',notifBody,true);
+        if(!activeRes){
+          await createRes(best);
+          showT((scanMode==='auto'?'Tid hittad och reserverad! ':'Ledig tid hittad! ')+slotDesc);
+        }
+      }
+    }catch(e){
+      showT('Nätverksfel: '+e,true);
+    }
+
+    if(!running)break;
+    document.getElementById('scLbl').textContent='Väntar på nästa scan...';
+    await sleep(activeRes?60000:20000);
+  }
+  document.getElementById('scanp').classList.remove('on');updUI('off');stopTmr();
+}
+function stopScanner(){running=false}
+
+function updUI(st){
+  document.getElementById('stDot').className='st-dot '+(st==='on'?'on':'off');
+  document.getElementById('stTxt').textContent=st==='on'?'Söker aktivt':'Stoppad';
+  document.getElementById('goBtn').disabled=st==='on'||!authenticated;document.getElementById('stBtn').disabled=st!=='on';
+}
+
+/* ── Reservations ── */
+async function createRes(slot){
+  var r=await fetch('/api/reserve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot:slot})}).then(function(r){return r.json()});
+  activeRes=r;renderRes();startResCd();
+}
+function loadExistingRes(){fetch('/api/reservations').then(function(r){return r.json()}).then(function(l){if(l.length>0){activeRes=l[0];renderRes();startResCd()}})}
+var resI=null;
+function startResCd(){
+  if(resI)clearInterval(resI);
+  resI=setInterval(function(){
+    if(!activeRes){clearInterval(resI);return}
+    var left=Math.max(0,Math.floor((new Date(activeRes.expires_at).getTime()-Date.now())/1e3));
+    if(left<=0){activeRes.status='expired';renderRes();clearInterval(resI);activeRes=null;return}
+    var el=document.getElementById('resCd');if(el)el.textContent=String(Math.floor(left/60)).padStart(2,'0')+':'+String(left%60).padStart(2,'0');
+  },1e3);
+}
+
+function renderRes(){
+  var a=document.getElementById('resArea');
+  if(!activeRes){a.innerHTML='';return}
+  var r=activeRes,sl=r.slot,left=Math.max(0,Math.floor((new Date(r.expires_at).getTime()-Date.now())/1e3)),exp=r.status==='expired'||left<=0;
+  var dn=['söndag','måndag','tisdag','onsdag','torsdag','fredag','lördag'],mn=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+  var d=new Date(sl.date+'T12:00:00'),dl=dn[d.getDay()]+' '+d.getDate()+' '+mn[d.getMonth()]+' '+d.getFullYear();
+  var m=String(Math.floor(left/60)).padStart(2,'0'),s=String(left%60).padStart(2,'0');
+  a.innerHTML='<div class="res-card'+(exp?' res-exp':'')+'">'
+    +'<div class="badge">'+(exp?'Reservationen har gått ut':'Tid reserverad!')+'</div>'
+    +'<div class="dt">'+esc(dl)+', '+esc(sl.time)+'</div>'
+    +'<div class="loc">'+esc(sl.location)+'</div>'
+    +(exp?'':'<div class="cd">Gäller i <span class="t" id="resCd">'+m+':'+s+'</span></div>')
+    +'<div class="acts">'+(exp
+      ?'<button class="btn btn-dm" onclick="dismissRes()">Stäng</button>'
+      :'<button class="btn btn-bk" onclick="confirmBk()">Boka</button><button class="btn btn-dm" onclick="dismissRes()">Släng</button>')
+    +'</div>'+(sl.cost?'<div class="cost">Kostnad: '+esc(sl.cost)+'</div>':'')+'</div>';
+}
+async function confirmBk(){
+  if(!activeRes)return;
+  await fetch('/api/reservation/'+activeRes.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'booked'})});
+  showT('Bokning bekräftad! Öppnar Trafikverket...');
+  var lt=document.getElementById('licenceType').value||'B';
+  var lp=LICENCE_PARAMS[lt]||LICENCE_PARAMS['B'];
+  var et=document.getElementById('examType').value||'Körprov';
+  var eid=lp.eids[et]||12;
+  window.open('https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/0','_blank');
+  activeRes=null;renderRes();if(resI)clearInterval(resI);
+}
+async function dismissRes(){
+  if(!activeRes)return;
+  if(activeRes.status!=='expired')await fetch('/api/reservation/'+activeRes.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'dismissed'})});
+  activeRes=null;renderRes();if(resI)clearInterval(resI);showT('Reservationen släppt. Söker vidare...');
+}
+
+/* ── Render ── */
+function popFilters(locs){
+  ['slotF','tblF'].forEach(function(id){
+    var s=document.getElementById(id),cur=s.value;
+    s.innerHTML='<option value="">Alla ('+locs.length+')</option>';
+    locs.forEach(function(l){s.innerHTML+='<option value="'+esc(l)+'"'+(l===cur?' selected':'')+'>'+esc(l)+'</option>'});
+  });
+}
+
+function renderSlots(){
+  var c=document.getElementById('slotsC'),f=document.getElementById('slotF').value;
+  var ak={};addedTimes.forEach(function(a){ak[a.date+'|'+a.time+'|'+a.location]=true});
+  var list=f?allTimes.filter(function(t){return t.location===f}):allTimes;
+  if(!list.length){c.innerHTML='<div class="empty">Inga tider hittades</div>';return}
+  var bd={};list.forEach(function(t){if(!bd[t.date])bd[t.date]={};if(!bd[t.date][t.location])bd[t.date][t.location]=[];bd[t.date][t.location].push(t)});
+  var dates=Object.keys(bd).sort(),dn=['sön','mån','tis','ons','tor','fre','lör'],mn=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+  var html='';
+  dates.forEach(function(date){
+    var d=new Date(date+'T12:00:00'),label=dn[d.getDay()]+' '+d.getDate()+' '+mn[d.getMonth()]+' '+d.getFullYear();
+    var lo=bd[date],lns=Object.keys(lo).sort(),tot=0;lns.forEach(function(l){tot+=lo[l].length});
+    html+='<div class="sday"><div class="sday-h"><span>'+label+'</span><span class="c">'+tot+' tider</span></div><div class="slocs">';
+    lns.forEach(function(loc){
+      var ts=lo[loc].sort(function(a,b){return a.time.localeCompare(b.time)});
+      html+='<div><div class="sloc-nm">'+esc(loc)+' ('+ts.length+')</div><div class="stimes">';
+      ts.forEach(function(t){
+        var fr=ak[t.date+'|'+t.time+'|'+t.location];
+        html+='<div class="schip'+(fr?' fresh':'')+'" onclick="qRes(\''+esc(t.date)+'\',\''+esc(t.time)+'\',\''+esc(t.location).replace(/'/g,"\\'")+'\',\''+esc(t.name).replace(/'/g,"\\'")+'\',\''+esc(t.cost).replace(/'/g,"\\'")+'\',\''+esc(t.occasion_id)+'\')">'
+          +'<span class="t">'+esc(t.time)+'</span><span class="c">'+esc(t.cost)+'</span><span class="n">'+esc(t.name)+'</span></div>';
+      });
+      html+='</div></div>';
+    });
+    html+='</div></div>';
+  });
+  c.innerHTML=html;
+}
+
+function renderTbl(){
+  var tb=document.getElementById('tblB'),f=document.getElementById('tblF').value;
+  var list=f?allTimes.filter(function(t){return t.location===f}):allTimes;
+  tb.innerHTML=list.map(function(t){return'<tr><td>'+esc(t.date)+'</td><td>'+esc(t.time)+'</td><td>'+esc(t.location)+'</td><td>'+esc(t.name)+'</td><td>'+esc(t.cost)+'</td></tr>'}).join('');
+}
+
+async function qRes(date,time,loc,name,cost,oid){
+  if(activeRes){showT('Du har redan en aktiv reservation!',true);return}
+  await createRes({date:date,time:time,location:loc,name:name,cost:cost,occasion_id:oid});
+  showT('Tid reserverad: '+date+' '+time+' — '+loc);window.scrollTo({top:0,behavior:'smooth'});
+}
+function showT(msg,err){var t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(err?'err':'ok');t.style.display='block';setTimeout(function(){t.style.display='none'},5000)}
+</script>
+</body>
+</html>
