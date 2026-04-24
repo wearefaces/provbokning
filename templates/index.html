@@ -270,6 +270,35 @@ tr:hover td{background:var(--accent-bg)}
       <div class="field"><label>Till datum</label><input type="date" id="dtTo" value="{{ config.date_to }}"></div>
     </div>
 
+    <!-- SMS Notifications -->
+    <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)">
+          <input type="checkbox" id="smsEnabled" {{ 'checked' if config.get('sms_enabled') }} style="width:18px;height:18px;accent-color:var(--accent)">
+          SMS-notiser (46elks)
+        </label>
+      </div>
+      <div id="smsFields" style="display:none">
+        <div class="card-row" style="margin-bottom:10px">
+          <div class="field"><label>Telefonnummer</label>
+            <input type="tel" id="smsTo" placeholder="+46XXXXXXXXX" value="{{ config.get('sms_to','') }}">
+          </div>
+          <div class="field"><label>46elks API-användarnamn</label>
+            <input type="text" id="smsUser" placeholder="u..." value="{{ config.get('sms_api_username','') }}">
+          </div>
+        </div>
+        <div class="card-row" style="margin-bottom:10px">
+          <div class="field"><label>46elks API-lösenord</label>
+            <input type="password" id="smsPass" placeholder="Lösenord" value="{{ config.get('sms_api_password','') }}">
+          </div>
+          <div class="field" style="justify-content:flex-end">
+            <button class="btn btn-go btn-sm" onclick="testSms()" id="smsTestBtn" style="align-self:flex-end">Skicka test-SMS</button>
+          </div>
+        </div>
+        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">Skapa konto på <a href="https://46elks.com" target="_blank" style="color:var(--accent)">46elks.com</a> och hämta dina API-uppgifter under Dashboard.</p>
+      </div>
+    </div>
+
     <!-- Location Browser -->
     <h3>Välj orter <span style="font-weight:400;color:var(--text3);text-transform:none;font-size:.8rem">(lämna tomt = alla)</span></h3>
     <div class="loc-browser">
@@ -362,8 +391,24 @@ function playAlert(){
   }catch(e){}
 }
 
+/* ── SMS toggle ── */
+function initSmsToggle(){
+  var cb=document.getElementById('smsEnabled'),f=document.getElementById('smsFields');
+  function upd(){f.style.display=cb.checked?'block':'none'}
+  cb.addEventListener('change',upd);upd();
+}
+async function testSms(){
+  var btn=document.getElementById('smsTestBtn');btn.disabled=true;btn.textContent='Skickar...';
+  await saveCfg();
+  try{
+    var r=await fetch('/api/sms/test',{method:'POST'});var d=await r.json();
+    if(d.ok){showT('Test-SMS skickat!')}else{showT('SMS-fel: '+(d.error||d.data||'okänt'),true)}
+  }catch(e){showT('Nätverksfel: '+e,true)}
+  btn.disabled=false;btn.textContent='Skicka test-SMS';
+}
+
 /* ── Init ── */
-(function(){setMode(scanMode);loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission()})();
+(function(){setMode(scanMode);loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();initSmsToggle()})();
 
 /* ── BankID Authentication ── */
 var authPollTimer=null;
@@ -520,7 +565,9 @@ function stopTmr(){if(tmrI)clearInterval(tmrI);tmrI=null}
 function saveCfg(){
   return fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
-    locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,mode:scanMode
+    locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,mode:scanMode,
+    sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value,
+    sms_api_username:document.getElementById('smsUser').value,sms_api_password:document.getElementById('smsPass').value
   })});
 }
 

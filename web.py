@@ -114,6 +114,20 @@ def make_key(t: dict) -> str:
     return f"{t.get('date','')}|{t.get('time','')}|{t.get('location','')}|{t.get('name','')}"
 
 
+def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
+    """Send an SMS via 46elks API."""
+    try:
+        r = http_requests.post(
+            "https://api.46elks.com/a1/sms",
+            auth=(api_user, api_pass),
+            data={"from": "Provbok", "to": to, "message": message},
+            timeout=15,
+        )
+        return {"ok": r.status_code == 200, "status": r.status_code, "data": r.text}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 def _fetch_location(ssn: str, exam_type_id: int, location_id: int,
                     licence_id: int = 5, vehicle_type_id: int = 2) -> list[dict]:
     """Fetch available times for a single location using the authenticated session."""
@@ -188,6 +202,10 @@ def save_config_route():
     config["date_from"] = data.get("date_from", "2026-04-13")
     config["date_to"] = data.get("date_to", "2026-12-31")
     config["mode"] = data.get("mode", "manual")
+    config["sms_enabled"] = data.get("sms_enabled", False)
+    config["sms_to"] = data.get("sms_to", "").strip()
+    config["sms_api_username"] = data.get("sms_api_username", "").strip()
+    config["sms_api_password"] = data.get("sms_api_password", "").strip()
     save_config_file(config)
     return jsonify({"status": "ok"})
 
@@ -398,6 +416,30 @@ def api_scan():
     removed = [previous_keys[k] for k in previous_keys if k not in current_keys]
 
     save_snapshot(collected)
+
+    # Send SMS notification for new slots
+    if added and config.get("sms_enabled") and config.get("sms_to") and config.get("sms_api_username"):
+        dn = ["sön", "mån", "tis", "ons", "tor", "fre", "lör"]
+        mn = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
+        lines = []
+        for t in sorted(added, key=lambda x: x["date"] + x["time"])[:5]:
+            try:
+                from datetime import date as _date
+                parts = t["date"].split("-")
+                d = _date(int(parts[0]), int(parts[1]), int(parts[2]))
+                # weekday(): mon=0..sun=6, dn index: sön=0,mån=1..lör=6
+                dl = f"{dn[(d.weekday() + 1) % 7]} {d.day} {mn[d.month - 1]}"
+            except Exception:
+                dl = t["date"]
+            lines.append(f"{dl} {t['time']} - {t['location']}")
+        msg = f"Ledig provtid hittad!\n" + "\n".join(lines)
+        if len(added) > 5:
+            msg += f"\n+{len(added) - 5} fler tider"
+        try:
+            send_sms(config["sms_to"], msg, config["sms_api_username"], config["sms_api_password"])
+        except Exception as e:
+            app.logger.error("SMS send failed: %s", e)
+
     return jsonify({"ok": True, "times": collected, "added": added, "removed": removed})
 
 
@@ -497,6 +539,19 @@ def known_locations():
     snapshot = load_snapshot()
     names = sorted(set(t["location"] for t in snapshot if t.get("location")))
     return jsonify(names)
+
+
+@app.route("/api/sms/test", methods=["POST"])
+def api_sms_test():
+    """Send a test SMS to verify 46elks credentials."""
+    config = load_config()
+    to = config.get("sms_to", "")
+    user = config.get("sms_api_username", "")
+    pwd = config.get("sms_api_password", "")
+    if not to or not user or not pwd:
+        return jsonify({"ok": False, "error": "Fyll i telefonnummer och 46elks-uppgifter först"})
+    result = send_sms(to, "Test från Provbokningsbevakning - SMS fungerar!", user, pwd)
+    return jsonify(result)
 
 
 @app.route("/api/location_details")
