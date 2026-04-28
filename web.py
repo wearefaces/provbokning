@@ -26,6 +26,15 @@ LOCATION_DETAILS_PATH = PROJECT_DIR / "data" / "location_details.json"
 SNAPSHOT_PATH = PROJECT_DIR / "data" / "last_snapshot.json"
 RESERVATIONS_PATH = PROJECT_DIR / "data" / "reservations.json"
 LOG_PATH = PROJECT_DIR / "data" / "activity_log.json"
+SMS_NOTIFIED_PATH = PROJECT_DIR / "data" / "sms_notified.json"
+
+SMS_NOTIFY_TTL_MINUTES = 30
+
+# Use the system CA bundle if available so corporate TLS-intercept proxies
+# (e.g. Zscaler) whose root is installed system-wide are trusted. Falls back
+# to certifi's bundle when the system bundle isn't present.
+_SYS_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
+CA_BUNDLE = _SYS_CA_BUNDLE if Path(_SYS_CA_BUNDLE).exists() else True
 
 RESERVATION_HOLD_MINUTES = 15
 TV_BASE = "https://fp.trafikverket.se/Boka"
@@ -114,6 +123,24 @@ def make_key(t: dict) -> str:
     return f"{t.get('date','')}|{t.get('time','')}|{t.get('location','')}|{t.get('name','')}"
 
 
+def load_sms_notified() -> dict:
+    """Return {slot_key: iso_expiry} of recently SMS-notified slots, dropping expired."""
+    if not SMS_NOTIFIED_PATH.exists():
+        return {}
+    try:
+        with open(SMS_NOTIFIED_PATH, "r") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return {k: v for k, v in data.items() if isinstance(v, str) and v > now_iso}
+
+
+def save_sms_notified(notified: dict):
+    with open(SMS_NOTIFIED_PATH, "w") as f:
+        json.dump(notified, f, indent=2, ensure_ascii=False)
+
+
 def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
     """Send an SMS via 46elks API."""
     try:
@@ -123,10 +150,40 @@ def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
             data={"from": "Provbok", "to": to, "message": message},
             timeout=15,
             proxies={"http": None, "https": None},
-            verify=False,
+            verify=CA_BUNDLE,
         )
-        return {"ok": r.status_code == 200, "status": r.status_code, "data": r.text}
+        ok = r.status_code == 200
+        app.logger.info("SMS to %s -> status=%s body=%s", to, r.status_code, r.text[:200])
+        return {"ok": ok, "status": r.status_code, "data": r.text}
     except Exception as e:
+        app.logger.error("SMS exception: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
+def send_ntfy(topic: str, title: str, message: str, server: str = "https://ntfy.sh") -> dict:
+    """Send a push notification via ntfy.sh (free, no account).
+
+    Install the ntfy Windows app from https://ntfy.sh/ or open
+    https://ntfy.sh/<topic> in a browser to receive notifications.
+    """
+    try:
+        url = server.rstrip("/") + "/" + topic.strip().lstrip("/")
+        r = http_requests.post(
+            url,
+            data=message.encode("utf-8"),
+            headers={
+                "Title": title.encode("utf-8"),
+                "Priority": "high",
+                "Tags": "red_car,bell",
+            },
+            timeout=15,
+            verify=CA_BUNDLE,
+        )
+        ok = 200 <= r.status_code < 300
+        app.logger.info("ntfy to %s -> status=%s", topic, r.status_code)
+        return {"ok": ok, "status": r.status_code, "data": r.text[:200]}
+    except Exception as e:
+        app.logger.error("ntfy exception: %s", e)
         return {"ok": False, "error": str(e)}
 
 
@@ -206,6 +263,12 @@ def save_config_route():
     config["mode"] = data.get("mode", "manual")
     config["sms_enabled"] = data.get("sms_enabled", False)
     config["sms_to"] = data.get("sms_to", "").strip()
+    if "ntfy_enabled" in data:
+        config["ntfy_enabled"] = bool(data.get("ntfy_enabled"))
+    if "ntfy_topic" in data:
+        config["ntfy_topic"] = data.get("ntfy_topic", "").strip()
+    if "ntfy_server" in data:
+        config["ntfy_server"] = (data.get("ntfy_server") or "https://ntfy.sh").strip()
     save_config_file(config)
     return jsonify({"status": "ok"})
 
@@ -417,28 +480,108 @@ def api_scan():
 
     save_snapshot(collected)
 
-    # Send SMS notification for new slots
-    if added and config.get("sms_enabled") and config.get("sms_to") and config.get("sms_api_username"):
+    # Send SMS notification for slots not recently notified (independent of snapshot diff).
+    # Using snapshot-based "added" alone is unreliable because a slot may already be in
+    # the snapshot from a prior scan run, so we dedupe by slot key with a TTL instead.
+    sms_enabled = bool(config.get("sms_enabled"))
+    sms_to = config.get("sms_to", "").strip()
+    sms_user = config.get("sms_api_username", "")
+    sms_pass = config.get("sms_api_password", "")
+    sms_configured = sms_enabled and sms_to and sms_user and sms_pass
+
+    ntfy_enabled = bool(config.get("ntfy_enabled"))
+    ntfy_topic = (config.get("ntfy_topic") or "").strip()
+    ntfy_server = (config.get("ntfy_server") or "https://ntfy.sh").strip()
+    ntfy_configured = ntfy_enabled and ntfy_topic
+
+    notified = load_sms_notified()
+    to_notify = [t for t in collected if make_key(t) not in notified]
+
+    def _build_message():
         dn = ["sön", "mån", "tis", "ons", "tor", "fre", "lör"]
         mn = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
         lines = []
-        for t in sorted(added, key=lambda x: x["date"] + x["time"])[:5]:
+        for t in sorted(to_notify, key=lambda x: x["date"] + x["time"])[:5]:
             try:
                 from datetime import date as _date
                 parts = t["date"].split("-")
                 d = _date(int(parts[0]), int(parts[1]), int(parts[2]))
-                # weekday(): mon=0..sun=6, dn index: sön=0,mån=1..lör=6
                 dl = f"{dn[(d.weekday() + 1) % 7]} {d.day} {mn[d.month - 1]}"
             except Exception:
                 dl = t["date"]
             lines.append(f"{dl} {t['time']} - {t['location']}")
-        msg = f"Ledig provtid hittad!\n" + "\n".join(lines)
-        if len(added) > 5:
-            msg += f"\n+{len(added) - 5} fler tider"
+        msg = "Ledig provtid hittad!\n" + "\n".join(lines)
+        if len(to_notify) > 5:
+            msg += f"\n+{len(to_notify) - 5} fler tider"
+        return msg
+
+    any_sent_ok = False
+
+    if to_notify and ntfy_configured:
         try:
-            send_sms(config["sms_to"], msg, config["sms_api_username"], config["sms_api_password"])
+            ntfy_result = send_ntfy(ntfy_topic, "Ledig provtid hittad!",
+                                    _build_message(), server=ntfy_server)
+        except Exception as e:
+            app.logger.error("ntfy send failed: %s", e)
+            ntfy_result = {"ok": False, "error": str(e)}
+        if ntfy_result.get("ok"):
+            any_sent_ok = True
+        log = load_activity_log()
+        log.append({
+            "type": "ntfy_sent" if ntfy_result.get("ok") else "ntfy_failed",
+            "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "topic": ntfy_topic,
+            "notified_count": len(to_notify),
+            "result": {k: ntfy_result.get(k) for k in ("ok", "status", "error") if k in ntfy_result},
+        })
+        save_activity_log(log)
+
+    if to_notify and sms_configured:
+        msg = _build_message()
+        sms_result = {"ok": False, "error": "not attempted"}
+        try:
+            sms_result = send_sms(sms_to, msg, sms_user, sms_pass)
         except Exception as e:
             app.logger.error("SMS send failed: %s", e)
+            sms_result = {"ok": False, "error": str(e)}
+
+        if sms_result.get("ok"):
+            any_sent_ok = True
+
+        log = load_activity_log()
+        log.append({
+            "type": "sms_sent" if sms_result.get("ok") else "sms_failed",
+            "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "to": sms_to,
+            "notified_count": len(to_notify),
+            "result": {k: sms_result.get(k) for k in ("ok", "status", "error") if k in sms_result},
+        })
+        save_activity_log(log)
+
+    if to_notify and any_sent_ok:
+        expiry = (datetime.now(timezone.utc)
+                  + timedelta(minutes=SMS_NOTIFY_TTL_MINUTES)
+                  ).isoformat().replace("+00:00", "Z")
+        for t in to_notify:
+            notified[make_key(t)] = expiry
+        save_sms_notified(notified)
+
+    if to_notify and not sms_configured and not ntfy_configured:
+        app.logger.info(
+            "New slots found (%d) but no notification channel configured "
+            "(sms_enabled=%s, ntfy_enabled=%s)",
+            len(to_notify), sms_enabled, ntfy_enabled,
+        )
+        log = load_activity_log()
+        log.append({
+            "type": "notify_skipped",
+            "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "reason": "no_channel_configured",
+            "notified_count": len(to_notify),
+            "sms_enabled": sms_enabled,
+            "ntfy_enabled": ntfy_enabled,
+        })
+        save_activity_log(log)
 
     return jsonify({"ok": True, "times": collected, "added": added, "removed": removed})
 
@@ -551,6 +694,21 @@ def api_sms_test():
     if not to or not user or not pwd:
         return jsonify({"ok": False, "error": "Fyll i telefonnummer och 46elks-uppgifter först"})
     result = send_sms(to, "Test från Provbokningsbevakning - SMS fungerar!", user, pwd)
+    return jsonify(result)
+
+
+@app.route("/api/ntfy/test", methods=["POST"])
+def api_ntfy_test():
+    """Send a test ntfy notification to verify the topic works on Windows."""
+    config = load_config()
+    body = request.get_json(silent=True) or {}
+    topic = (body.get("topic") or config.get("ntfy_topic") or "").strip()
+    server = (body.get("server") or config.get("ntfy_server") or "https://ntfy.sh").strip()
+    if not topic:
+        return jsonify({"ok": False, "error": "Fyll i ett ntfy-topic först"})
+    result = send_ntfy(topic, "Provbok test",
+                        "Test från Provbokningsbevakning - ntfy fungerar!",
+                        server=server)
     return jsonify(result)
 
 

@@ -291,6 +291,31 @@ tr:hover td{background:var(--accent-bg)}
       </div>
     </div>
 
+    <!-- ntfy / Windows push notifications -->
+    <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)">
+          <input type="checkbox" id="ntfyEnabled" {{ 'checked' if config.get('ntfy_enabled') }} style="width:18px;height:18px;accent-color:var(--accent)">
+          Windows push-notiser (ntfy)
+        </label>
+      </div>
+      <div id="ntfyFields" style="display:none">
+        <div class="card-row" style="margin-bottom:10px">
+          <div class="field"><label>Topic (valfritt namn, håll det hemligt)</label>
+            <input type="text" id="ntfyTopic" placeholder="t.ex. provbok-mittnamn-7g3h" value="{{ config.get('ntfy_topic','') }}">
+          </div>
+          <div class="field" style="justify-content:flex-end">
+            <button class="btn btn-go btn-sm" onclick="testNtfy()" id="ntfyTestBtn" style="align-self:flex-end">Skicka test-notis</button>
+          </div>
+        </div>
+        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">
+          Installera <a href="https://ntfy.sh/" target="_blank" style="color:var(--accent)">ntfy</a> på Windows
+          (eller öppna <code id="ntfyUrl" style="color:var(--accent)">https://ntfy.sh/&lt;topic&gt;</code> i webbläsaren)
+          och prenumerera på samma topic. Då får du toast-notiser i Windows när tider hittas — även om webbsidan är stängd.
+        </p>
+      </div>
+    </div>
+
     <!-- Location Browser -->
     <h3>Välj orter <span style="font-weight:400;color:var(--text3);text-transform:none;font-size:.8rem">(lämna tomt = alla)</span></h3>
     <div class="loc-browser">
@@ -399,8 +424,29 @@ async function testSms(){
   btn.disabled=false;btn.textContent='Skicka test-SMS';
 }
 
+/* ── ntfy toggle ── */
+function initNtfyToggle(){
+  var cb=document.getElementById('ntfyEnabled'),f=document.getElementById('ntfyFields');
+  var inp=document.getElementById('ntfyTopic'),urlEl=document.getElementById('ntfyUrl');
+  function updUrl(){urlEl.textContent='https://ntfy.sh/'+(inp.value.trim()||'<topic>')}
+  function upd(){f.style.display=cb.checked?'block':'none';updUrl()}
+  cb.addEventListener('change',upd);inp.addEventListener('input',updUrl);upd();
+}
+async function testNtfy(){
+  var btn=document.getElementById('ntfyTestBtn');btn.disabled=true;btn.textContent='Skickar...';
+  var topic=document.getElementById('ntfyTopic').value.trim();
+  if(!topic){showT('Fyll i ett ntfy-topic först',true);btn.disabled=false;btn.textContent='Skicka test-notis';return}
+  await saveCfg();
+  try{
+    var r=await fetch('/api/ntfy/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:topic})});
+    var d=await r.json();
+    if(d.ok){showT('Test-notis skickad!')}else{showT('ntfy-fel: '+(d.error||d.data||'okänt'),true)}
+  }catch(e){showT('Nätverksfel: '+e,true)}
+  btn.disabled=false;btn.textContent='Skicka test-notis';
+}
+
 /* ── Init ── */
-(function(){setMode(scanMode);loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();initSmsToggle()})();
+(function(){setMode(scanMode);loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();initSmsToggle();initNtfyToggle()})();
 
 /* ── BankID Authentication ── */
 var authPollTimer=null;
@@ -558,7 +604,8 @@ function saveCfg(){
   return fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
     locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,mode:scanMode,
-    sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value
+    sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value,
+    ntfy_enabled:document.getElementById('ntfyEnabled').checked,ntfy_topic:document.getElementById('ntfyTopic').value
   })});
 }
 
