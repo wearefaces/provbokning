@@ -728,24 +728,21 @@ function confirmBk(){
   var lp=LICENCE_PARAMS[lt]||LICENCE_PARAMS['B'];
   var et=document.getElementById('examType').value||'Körprov';
   var eid=lp.eids[et]||12;
-  // Pass the slot's location ID so Trafikverket opens directly on that
-  // location – the user just clicks the matching date/time.
-  var sl=activeRes&&activeRes.slot||{};
-  var locId=sl.location_id||0;
-  if(!locId&&sl.location&&locDetails&&locDetails.length){
-    var nm=String(sl.location).toLowerCase();
-    for(var i=0;i<locDetails.length;i++){
-      if(String(locDetails[i].name||'').toLowerCase()===nm){locId=locDetails[i].id;break}
-    }
-  }
-  var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/'+locId;
+  // Trafikverket's SPA does not support deep-linking to a specific location
+  // or date – the 4th segment is a booking-mode flag (0 = new booking).
+  // We always pass 0 and rely on the user picking the slot on the page.
+  var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/0';
+  // Copy the slot details to the clipboard so the user can paste / cross-check.
+  var sl=activeRes.slot||{};
+  var info=(sl.date||'')+' '+(sl.time||'')+' – '+(sl.location||'');
+  try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(info)}catch(e){}
   var win=window.open(url,'_blank');
   if(!win){
     // Popup blocked – fall back to same-tab navigation after a tiny delay so the toast shows.
     showT('Popup blockerades – öppnar i samma flik...');
     setTimeout(function(){location.href=url},300);
   }else{
-    showT('Bokning bekräftad! Öppnar Trafikverket...');
+    showT('Öppnar Trafikverket. Välj: '+info);
   }
   var resId=activeRes.id;
   fetch('/api/reservation/'+resId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'booked'})}).catch(function(){});
