@@ -720,15 +720,25 @@ function renderRes(){
       :'<button class="btn btn-bk" onclick="confirmBk()">Boka</button><button class="btn btn-dm" onclick="dismissRes()">Släng</button>')
     +'</div>'+(sl.cost?'<div class="cost">Kostnad: '+esc(sl.cost)+'</div>':'')+'</div>';
 }
-async function confirmBk(){
+function confirmBk(){
   if(!activeRes)return;
-  await fetch('/api/reservation/'+activeRes.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'booked'})});
-  showT('Bokning bekräftad! Öppnar Trafikverket...');
+  // IMPORTANT: window.open must run synchronously inside the click handler,
+  // otherwise the popup blocker kills it (we lose the user-gesture after await).
   var lt=document.getElementById('licenceType').value||'B';
   var lp=LICENCE_PARAMS[lt]||LICENCE_PARAMS['B'];
   var et=document.getElementById('examType').value||'Körprov';
   var eid=lp.eids[et]||12;
-  window.open('https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/0','_blank');
+  var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/0';
+  var win=window.open(url,'_blank');
+  if(!win){
+    // Popup blocked – fall back to same-tab navigation after a tiny delay so the toast shows.
+    showT('Popup blockerades – öppnar i samma flik...');
+    setTimeout(function(){location.href=url},300);
+  }else{
+    showT('Bokning bekräftad! Öppnar Trafikverket...');
+  }
+  var resId=activeRes.id;
+  fetch('/api/reservation/'+resId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'booked'})}).catch(function(){});
   activeRes=null;renderRes();if(resI)clearInterval(resI);
 }
 async function dismissRes(){
