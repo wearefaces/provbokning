@@ -730,7 +730,14 @@ function confirmBk(){
   var eid=lp.eids[et]||12;
   // Pass the slot's location ID so Trafikverket opens directly on that
   // location – the user just clicks the matching date/time.
-  var locId=(activeRes&&activeRes.slot&&activeRes.slot.location_id)||0;
+  var sl=activeRes&&activeRes.slot||{};
+  var locId=sl.location_id||0;
+  if(!locId&&sl.location&&locDetails&&locDetails.length){
+    var nm=String(sl.location).toLowerCase();
+    for(var i=0;i<locDetails.length;i++){
+      if(String(locDetails[i].name||'').toLowerCase()===nm){locId=locDetails[i].id;break}
+    }
+  }
   var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/'+locId;
   var win=window.open(url,'_blank');
   if(!win){

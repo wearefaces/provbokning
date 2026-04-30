@@ -678,6 +678,20 @@ def api_reserve():
     """Create a 15-minute reservation hold on a found time slot."""
     data = request.json
     slot = data.get("slot", {})
+
+    # Make sure the slot carries a location_id so the Boka button can deep-link
+    # to the correct Trafikverket location.
+    if not slot.get("location_id") and slot.get("location") and LOCATION_DETAILS_PATH.exists():
+        try:
+            with open(LOCATION_DETAILS_PATH, "r") as f:
+                wanted = slot["location"].lower()
+                for loc in json.load(f).get("locations", []):
+                    if loc.get("name", "").lower() == wanted:
+                        slot["location_id"] = loc["id"]
+                        break
+        except Exception:
+            pass
+
     now = datetime.now(timezone.utc)
     expires = now + timedelta(minutes=RESERVATION_HOLD_MINUTES)
 
