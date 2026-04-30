@@ -338,7 +338,6 @@ def save_config_route():
         config["locations"] = [l.strip() for l in locs.split(",") if l.strip()]
     config["date_from"] = data.get("date_from", "2026-04-13")
     config["date_to"] = data.get("date_to", "2026-12-31")
-    config["mode"] = data.get("mode", "manual")
     config["sms_enabled"] = data.get("sms_enabled", False)
     config["sms_to"] = data.get("sms_to", "").strip()
     if "ntfy_enabled" in data:

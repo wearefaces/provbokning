@@ -61,9 +61,9 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .btn-sm{padding:6px 14px;font-size:.8rem}
 
 /* Mode toggle */
-.mode-tg{display:flex;background:var(--card2);border-radius:8px;border:1px solid var(--border);overflow:hidden}
-.mode-b{padding:6px 14px;font-size:.8rem;font-weight:600;color:var(--text3);background:transparent;border:none;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
-.mode-b.on{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(79,70,229,.2)}
+.mode-tg{display:none}
+.mode-b{display:none}
+.mode-b.on{display:none}
 
 /* Cards */
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin-bottom:16px;box-shadow:var(--shadow)}
@@ -216,10 +216,6 @@ tr:hover td{background:var(--accent-bg)}
     <button class="btn btn-go" id="goBtn" onclick="startScanner()" disabled>Starta</button>
     <button class="btn btn-st" id="stBtn" onclick="stopScanner()" disabled>Stoppa</button>
   </div>
-  <div class="mode-tg">
-    <button class="mode-b on" id="mMan" onclick="setMode('manual')">Meddela mig</button>
-    <button class="mode-b" id="mAuto" onclick="setMode('auto')">Autobokning</button>
-  </div>
   <div class="st-right">
     <span id="authStatus" style="font-size:.82rem;font-weight:500">Kontrollerar...</span>
     <button class="btn btn-sm btn-st" id="logoutBtn" onclick="doLogout()" style="display:none;padding:5px 12px;font-size:.78rem">Logga ut</button>
@@ -366,7 +362,6 @@ var allTimes=[],addedTimes=[];
 var selLocs={{ config.locations | tojson }};
 var locDetails=[];
 var locTimeCounts={};
-var scanMode='{{ config.get("mode","manual") }}'||'manual';
 var running=false,totalSearches=0,startTm=null,tmrI=null,activeRes=null;
 var authenticated=false;
 
@@ -446,7 +441,7 @@ async function testNtfy(){
 }
 
 /* ── Init ── */
-(function(){setMode(scanMode);loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();initSmsToggle();initNtfyToggle()})();
+(function(){loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();initSmsToggle();initNtfyToggle()})();
 
 /* ── BankID Authentication ── */
 var authPollTimer=null;
@@ -582,9 +577,6 @@ function renderSelBar(){
 function togLoc(nm){var i=selLocs.indexOf(nm);if(i>=0)selLocs.splice(i,1);else selLocs.push(nm);renderLocBrowser();renderSelBar()}
 function rmLoc(nm){selLocs=selLocs.filter(function(l){return l!==nm});renderLocBrowser();renderSelBar()}
 
-/* ── Mode ── */
-function setMode(m){scanMode=m;document.getElementById('mMan').classList.toggle('on',m==='manual');document.getElementById('mAuto').classList.toggle('on',m==='auto')}
-
 /* ── Settings toggle ── */
 function togSett(){document.getElementById('sBody').classList.toggle('open');document.getElementById('sArr').classList.toggle('open')}
 
@@ -603,7 +595,7 @@ function stopTmr(){if(tmrI)clearInterval(tmrI);tmrI=null}
 function saveCfg(){
   return fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
-    locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,mode:scanMode,
+    locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,
     sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value,
     ntfy_enabled:document.getElementById('ntfyEnabled').checked,ntfy_topic:document.getElementById('ntfyTopic').value
   })});
@@ -665,7 +657,7 @@ async function startScanner(){
         sendNotification('Ledig tid hittad!',notifBody,true);
         if(!activeRes){
           await createRes(best);
-          showT((scanMode==='auto'?'Tid hittad och reserverad! ':'Ledig tid hittad! ')+slotDesc);
+          showT('Ledig tid hittad! '+slotDesc);
         }
       }
     }catch(e){
