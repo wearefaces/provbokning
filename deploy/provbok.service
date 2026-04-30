@@ -1,0 +1,42 @@
+[Unit]
+Description=Trafikverket provbokningsbevakning (gunicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=provbok
+Group=provbok
+WorkingDirectory=/opt/provbok/app
+EnvironmentFile=/etc/provbok.env
+# Bind to localhost only — nginx terminates TLS and reverse-proxies.
+ExecStart=/opt/provbok/venv/bin/gunicorn \
+    --bind 127.0.0.1:8080 \
+    --workers 1 \
+    --threads 8 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile - \
+    web:app
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/provbok/data
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

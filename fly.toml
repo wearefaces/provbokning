@@ -1,0 +1,39 @@
+# fly.toml — Fly.io deployment config for Trafikverket checker.
+#
+# Before first deploy:
+#   fly launch --no-deploy --copy-config --name <your-app-name>
+#   fly volumes create provbok_data --size 1 --region arn
+#   fly secrets set LOGIN_USER=you LOGIN_PASS='strong-pw' \
+#                   SECRET_KEY="$(python -c 'import secrets;print(secrets.token_hex(32))')" \
+#                   COOKIE_SECURE=1 \
+#                   SMS_API_USERNAME=... SMS_API_PASSWORD=...
+#   fly deploy
+#
+# Important: keep min/max machines = 1. The app holds the BankID session
+# in memory, so a second instance would not share auth state.
+
+app = "provbok"           # change to your app name
+primary_region = "arn"    # Stockholm; closest to Trafikverket
+
+[build]
+
+[env]
+  PORT = "8080"
+  DATA_DIR = "/data"
+
+[[mounts]]
+  source = "provbok_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0   # set to 1 if you want it always-on
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

@@ -1,12 +1,15 @@
 venv/
 __pycache__/
 *.pyc
+.git/
+.gitignore
 .claude/
-.env
-
-# User-specific data
+.vscode/
+README.md
 config.json
+.env
 data/last_snapshot.json
 data/reservations.json
 data/activity_log.json
 data/sms_notified.json
+*.log

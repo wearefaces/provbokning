@@ -1,0 +1,22 @@
+services:
+  provbok:
+    build: .
+    image: trafikverket-checker:latest
+    container_name: provbok
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      DATA_DIR: "/data"
+      # Auth + cookie security (set in .env)
+      LOGIN_USER: "${LOGIN_USER:-}"
+      LOGIN_PASS: "${LOGIN_PASS:-}"
+      SECRET_KEY: "${SECRET_KEY:-}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-0}"
+      # Optional SMS provider creds
+      SMS_API_USERNAME: "${SMS_API_USERNAME:-}"
+      SMS_API_PASSWORD: "${SMS_API_PASSWORD:-}"
+    volumes:
+      # Persist runtime state (config.json, snapshots, reservations, logs)
+      - ./data:/data

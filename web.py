@@ -8,6 +8,7 @@ scans for available driving test times.
 """
 
 import json
+import os
 import uuid
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -15,18 +16,94 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests as http_requests
-from flask import Flask, render_template, request, jsonify
+from flask import (
+    Flask, redirect, render_template, request, jsonify, session, url_for,
+)
 
 app = Flask(__name__)
+# Secret key for session cookies. Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    # Secure cookie when served over HTTPS (Fly.io sets X-Forwarded-Proto)
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "0") in ("1", "true", "True"),
+)
 
 PROJECT_DIR = Path(__file__).parent
-CONFIG_PATH = PROJECT_DIR / "config.json"
-LOCATIONS_PATH = PROJECT_DIR / "data" / "valid_locations.json"
-LOCATION_DETAILS_PATH = PROJECT_DIR / "data" / "location_details.json"
-SNAPSHOT_PATH = PROJECT_DIR / "data" / "last_snapshot.json"
-RESERVATIONS_PATH = PROJECT_DIR / "data" / "reservations.json"
-LOG_PATH = PROJECT_DIR / "data" / "activity_log.json"
-SMS_NOTIFIED_PATH = PROJECT_DIR / "data" / "sms_notified.json"
+# DATA_DIR can be overridden (e.g. mounted persistent volume on Fly.io).
+# Read-only seed files (valid_locations.json, location_details.json) live in
+# the bundled ./data folder; runtime state goes to DATA_DIR.
+SEED_DATA_DIR = PROJECT_DIR / "data"
+DATA_DIR = Path(os.environ.get("DATA_DIR", str(SEED_DATA_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+CONFIG_PATH = Path(os.environ.get("CONFIG_PATH", str(DATA_DIR / "config.json")))
+# Bootstrap config.json on the volume from the bundled one if missing.
+if not CONFIG_PATH.exists() and (PROJECT_DIR / "config.json").exists():
+    try:
+        CONFIG_PATH.write_text((PROJECT_DIR / "config.json").read_text())
+    except Exception:
+        pass
+
+LOCATIONS_PATH = SEED_DATA_DIR / "valid_locations.json"
+LOCATION_DETAILS_PATH = SEED_DATA_DIR / "location_details.json"
+SNAPSHOT_PATH = DATA_DIR / "last_snapshot.json"
+RESERVATIONS_PATH = DATA_DIR / "reservations.json"
+LOG_PATH = DATA_DIR / "activity_log.json"
+SMS_NOTIFIED_PATH = DATA_DIR / "sms_notified.json"
+
+# ── Login (form-based session auth; set LOGIN_USER + LOGIN_PASS env vars) ──
+# Backwards compatible with the old BASIC_AUTH_USER / BASIC_AUTH_PASS names.
+LOGIN_USER = os.environ.get("LOGIN_USER") or os.environ.get("BASIC_AUTH_USER", "")
+LOGIN_PASS = os.environ.get("LOGIN_PASS") or os.environ.get("BASIC_AUTH_PASS", "")
+
+# Endpoints that don't require login (the login page itself + static files).
+_PUBLIC_ENDPOINTS = {"login", "static"}
+
+
+@app.before_request
+def _require_login():
+    if not LOGIN_USER or not LOGIN_PASS:
+        return None  # auth disabled
+    if request.endpoint in _PUBLIC_ENDPOINTS:
+        return None
+    if session.get("user") == LOGIN_USER:
+        return None
+    # JSON / XHR clients get a 401 instead of a redirect
+    if request.path.startswith("/api/") or \
+       request.accept_mimetypes.best == "application/json" or \
+       request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"ok": False, "error": "login_required"}), 401
+    return redirect(url_for("login", next=request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    # If auth is disabled, just bounce to the app
+    if not LOGIN_USER or not LOGIN_PASS:
+        return redirect(url_for("index"))
+    error = None
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        if username == LOGIN_USER and password == LOGIN_PASS:
+            session.clear()
+            session["user"] = LOGIN_USER
+            session.permanent = True
+            nxt = request.args.get("next") or url_for("index")
+            # Only allow same-site relative redirects
+            if not nxt.startswith("/") or nxt.startswith("//"):
+                nxt = url_for("index")
+            return redirect(nxt)
+        error = "Fel användarnamn eller lösenord"
+    return render_template("login.html", error=error), (401 if error else 200)
+
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 SMS_NOTIFY_TTL_MINUTES = 30
 
@@ -485,8 +562,9 @@ def api_scan():
     # the snapshot from a prior scan run, so we dedupe by slot key with a TTL instead.
     sms_enabled = bool(config.get("sms_enabled"))
     sms_to = config.get("sms_to", "").strip()
-    sms_user = config.get("sms_api_username", "")
-    sms_pass = config.get("sms_api_password", "")
+    # Prefer env vars (safer in deployment) but fall back to config.json
+    sms_user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
+    sms_pass = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
     sms_configured = sms_enabled and sms_to and sms_user and sms_pass
 
     ntfy_enabled = bool(config.get("ntfy_enabled"))
@@ -689,8 +767,8 @@ def api_sms_test():
     """Send a test SMS to verify 46elks credentials."""
     config = load_config()
     to = config.get("sms_to", "")
-    user = config.get("sms_api_username", "")
-    pwd = config.get("sms_api_password", "")
+    user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
+    pwd = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
     if not to or not user or not pwd:
         return jsonify({"ok": False, "error": "Fyll i telefonnummer och 46elks-uppgifter först"})
     result = send_sms(to, "Test från Provbokningsbevakning - SMS fungerar!", user, pwd)
@@ -723,4 +801,6 @@ def api_location_details():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
+    port = int(os.environ.get("PORT", "5000"))
+    debug = os.environ.get("FLASK_DEBUG", "1") not in ("0", "false", "False", "")
+    app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
