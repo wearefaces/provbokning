@@ -728,7 +728,10 @@ function confirmBk(){
   var lp=LICENCE_PARAMS[lt]||LICENCE_PARAMS['B'];
   var et=document.getElementById('examType').value||'Körprov';
   var eid=lp.eids[et]||12;
-  var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/0';
+  // Pass the slot's location ID so Trafikverket opens directly on that
+  // location – the user just clicks the matching date/time.
+  var locId=(activeRes&&activeRes.slot&&activeRes.slot.location_id)||0;
+  var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/'+locId;
   var win=window.open(url,'_blank');
   if(!win){
     // Popup blocked – fall back to same-tab navigation after a tiny delay so the toast shows.
