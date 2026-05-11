@@ -10,3 +10,7 @@ data/last_snapshot.json
 data/reservations.json
 data/activity_log.json
 data/sms_notified.json
+
+# Locally-generated CA bundle (corporate-specific, e.g. Zscaler)
+certs/
+data/zscaler-ca.pem

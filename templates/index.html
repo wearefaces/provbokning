@@ -357,7 +357,7 @@ tr:hover td{background:var(--accent-bg)}
 <script>
 /* ── State ── */
 var EIDS={'Körprov':12,'Kunskapsprov':3};
-var LICENCE_PARAMS={'B':{lid:5,eids:{'Körprov':12,'Kunskapsprov':3}},'A':{lid:4,eids:{'Körprov':10,'Kunskapsprov':2}},'A1':{lid:2,eids:{'Körprov':10,'Kunskapsprov':2}},'A2':{lid:24,eids:{'Körprov':10,'Kunskapsprov':2}}};
+var LICENCE_PARAMS={'B':{lid:5,vid:2,eids:{'Körprov':12,'Kunskapsprov':3}},'A':{lid:4,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'A1':{lid:2,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'A2':{lid:24,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}}};
 var allTimes=[],addedTimes=[];
 var selLocs={{ config.locations | tojson }};
 var locDetails=[];
@@ -720,12 +720,14 @@ function confirmBk(){
   var lp=LICENCE_PARAMS[lt]||LICENCE_PARAMS['B'];
   var et=document.getElementById('examType').value||'Körprov';
   var eid=lp.eids[et]||12;
-  // Trafikverket's SPA does not support deep-linking to a specific location
-  // or date – the 4th segment is a booking-mode flag (0 = new booking).
-  // We always pass 0 and rely on the user picking the slot on the page.
-  var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/0';
-  // Copy the slot details to the clipboard so the user can paste / cross-check.
+  // Trafikverket SPA route: /search/:ssn/:licenceId/:examTypeId/:locationId/:vehicleTypeId
+  // Passing the slot's locationId preselects the location so the slot is visible.
+  // SSN is accepted as plain (the SPA's parse() falls back to validate() for unscrambled values).
   var sl=activeRes.slot||{};
+  var locId=sl.location_id||0;
+  var vid=lp.vid||0;
+  var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/'+locId+'/'+vid;
+  // Copy the slot details to the clipboard so the user can paste / cross-check.
   var info=(sl.date||'')+' '+(sl.time||'')+' – '+(sl.location||'');
   try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(info)}catch(e){}
   var win=window.open(url,'_blank');

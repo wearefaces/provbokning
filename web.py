@@ -107,14 +107,73 @@ def logout():
 
 SMS_NOTIFY_TTL_MINUTES = 30
 
-# Use the system CA bundle if available so corporate TLS-intercept proxies
-# (e.g. Zscaler) whose root is installed system-wide are trusted. Falls back
-# to certifi's bundle when the system bundle isn't present.
+# CA bundle resolution.
+# Order of preference:
+#   1. CA_BUNDLE env var (explicit override).
+#   2. Project-local certs/ca-bundle.pem (built via scripts/build_ca_bundle.sh
+#      to merge certifi + corporate roots like Zscaler/LF).
+#   3. System bundle /etc/ssl/certs/ca-certificates.crt.
+#   4. certifi default (True).
+import ssl as _ssl
+_PROJECT_CA = Path(__file__).parent / "certs" / "ca-bundle.pem"
 _SYS_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
-CA_BUNDLE = _SYS_CA_BUNDLE if Path(_SYS_CA_BUNDLE).exists() else True
+_env_ca = os.environ.get("CA_BUNDLE")
+if _env_ca and Path(_env_ca).exists():
+    CA_BUNDLE = _env_ca
+elif _PROJECT_CA.exists():
+    CA_BUNDLE = str(_PROJECT_CA)
+elif Path(_SYS_CA_BUNDLE).exists():
+    CA_BUNDLE = _SYS_CA_BUNDLE
+else:
+    CA_BUNDLE = True
+
+
+def _build_ssl_context():
+    """Build an SSLContext that trusts our bundle and accepts any cert in
+    the bundle as a trust anchor (VERIFY_X509_PARTIAL_CHAIN).
+
+    This is required behind TLS-intercepting proxies (e.g. Zscaler) where
+    the locally installed root cert may not match the actual root that
+    signed the proxy's intermediate. With PARTIAL_CHAIN, including the
+    proxy's intermediate in the bundle is sufficient.
+    """
+    cafile = CA_BUNDLE if isinstance(CA_BUNDLE, str) else None
+    ctx = _ssl.create_default_context(cafile=cafile)
+    if cafile is None:
+        ctx.load_default_certs()
+    try:
+        ctx.verify_flags |= _ssl.VERIFY_X509_PARTIAL_CHAIN
+    except AttributeError:
+        pass
+    return ctx
+
+
+class _PartialChainAdapter(http_requests.adapters.HTTPAdapter):
+    """requests adapter that uses our partial-chain SSLContext."""
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["ssl_context"] = _build_ssl_context()
+        return super().init_poolmanager(*args, **kwargs)
+
+    def proxy_manager_for(self, *args, **kwargs):
+        kwargs["ssl_context"] = _build_ssl_context()
+        return super().proxy_manager_for(*args, **kwargs)
+
+
+def _outbound_session() -> "http_requests.Session":
+    """Session for outbound notification calls (SMS, ntfy) with the
+    partial-chain SSL context mounted for HTTPS."""
+    s = http_requests.Session()
+    s.mount("https://", _PartialChainAdapter())
+    return s
+
+
+_notify_session = _outbound_session()
 
 RESERVATION_HOLD_MINUTES = 15
-TV_BASE = "https://fp.trafikverket.se/Boka"
+# NOTE: must be lowercase "boka". Trafikverket's edge has started returning 403
+# (no body) for the uppercase "/Boka/check-authentication-status-qr" path while
+# the lowercase variant still works. Use lowercase for all API calls.
+TV_BASE = "https://fp.trafikverket.se/boka"
 EXAM_TYPE_IDS = {"Körprov": 12, "Kunskapsprov": 3}
 LICENCE_PARAMS = {
     "B": {"licence_id": 5, "vehicle_type_id": 2, "exam_ids": {"Körprov": 12, "Kunskapsprov": 3}},
@@ -221,7 +280,7 @@ def save_sms_notified(notified: dict):
 def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
     """Send an SMS via 46elks API."""
     try:
-        r = http_requests.post(
+        r = _notify_session.post(
             "https://api.46elks.com/a1/sms",
             auth=(api_user, api_pass),
             data={"from": "Provbok", "to": to, "message": message},
@@ -245,7 +304,7 @@ def send_ntfy(topic: str, title: str, message: str, server: str = "https://ntfy.
     """
     try:
         url = server.rstrip("/") + "/" + topic.strip().lstrip("/")
-        r = http_requests.post(
+        r = _notify_session.post(
             url,
             data=message.encode("utf-8"),
             headers={
