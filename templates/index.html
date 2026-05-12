@@ -283,7 +283,15 @@ tr:hover td{background:var(--accent-bg)}
             <button class="btn btn-go btn-sm" onclick="testSms()" id="smsTestBtn" style="align-self:flex-end">Skicka test-SMS</button>
           </div>
         </div>
-        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">Ange ditt mobilnummer i internationellt format (+46...) för att få SMS när lediga tider hittas.</p>
+        <div class="card-row" style="margin-bottom:10px">
+          <div class="field"><label>46elks API username</label>
+            <input type="text" id="smsApiUser" placeholder="uXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" value="{{ config.get('sms_api_username','') }}" autocomplete="off">
+          </div>
+          <div class="field"><label>46elks API password</label>
+            <input type="password" id="smsApiPass" placeholder="pXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" value="{{ config.get('sms_api_password','') }}" autocomplete="off">
+          </div>
+        </div>
+        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">Skaffa API-uppgifter på <a href="https://46elks.se/" target="_blank" rel="noopener" style="color:var(--accent)">46elks.se</a>. Ange ditt mobilnummer i internationellt format (+46...) för att få SMS när lediga tider hittas. Tips: i deployment kan du sätta miljövariablerna <code>SMS_API_USERNAME</code> och <code>SMS_API_PASSWORD</code> istället för att lagra dem här.</p>
       </div>
     </div>
 
@@ -597,6 +605,7 @@ function saveCfg(){
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
     locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,
     sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value,
+    sms_api_username:document.getElementById('smsApiUser').value,sms_api_password:document.getElementById('smsApiPass').value,
     ntfy_enabled:document.getElementById('ntfyEnabled').checked,ntfy_topic:document.getElementById('ntfyTopic').value
   })});
 }

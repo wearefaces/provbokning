@@ -399,6 +399,10 @@ def save_config_route():
     config["date_to"] = data.get("date_to", "2026-12-31")
     config["sms_enabled"] = data.get("sms_enabled", False)
     config["sms_to"] = data.get("sms_to", "").strip()
+    if "sms_api_username" in data:
+        config["sms_api_username"] = data.get("sms_api_username", "").strip()
+    if "sms_api_password" in data:
+        config["sms_api_password"] = data.get("sms_api_password", "").strip()
     if "ntfy_enabled" in data:
         config["ntfy_enabled"] = bool(data.get("ntfy_enabled"))
     if "ntfy_topic" in data:

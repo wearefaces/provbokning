@@ -12,7 +12,7 @@
 # Important: keep min/max machines = 1. The app holds the BankID session
 # in memory, so a second instance would not share auth state.
 
-app = "provbok"           # change to your app name
+app = "provbok-mg-2026"
 primary_region = "arn"    # Stockholm; closest to Trafikverket
 
 [build]
@@ -28,9 +28,9 @@ primary_region = "arn"    # Stockholm; closest to Trafikverket
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 0   # set to 1 if you want it always-on
+  min_machines_running = 1   # always-on so BankID session in memory survives
   processes = ["app"]
 
 [[vm]]
