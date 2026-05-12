@@ -1,16 +1,8 @@
-venv/
+.venv/
 __pycache__/
 *.pyc
-.claude/
-.env
-
-# User-specific data
-config.json
 data/last_snapshot.json
 data/reservations.json
 data/activity_log.json
 data/sms_notified.json
-
-# Locally-generated CA bundle (corporate-specific, e.g. Zscaler)
-certs/
-data/zscaler-ca.pem
+data/subscribers.json

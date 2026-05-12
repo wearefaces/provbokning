@@ -1,0 +1,21 @@
+{
+    "swedish_ssn": "198002099193",
+    "licence_type": "A",
+    "exam_type": "Körprov",
+    "locations": [
+        "Västerhaninge",
+        "Gillinge Trafikövningsplats",
+        "Stockholm City",
+        "Upplands Väsby",
+        "Västerhaninge 2"
+    ],
+    "check_interval_seconds": 300,
+    "date_from": "2026-05-18",
+    "date_to": "2026-06-20",
+    "sms_enabled": true,
+    "sms_to": "+46769417177",
+    "sms_api_username": "u1504718979f2479d62f40deb317aa3b8",
+    "sms_api_password": "053DD897754B91E70368EBC44259C459",
+    "ntfy_enabled": true,
+    "ntfy_topic": "provbok-micke_2026"
+}
