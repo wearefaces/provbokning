@@ -800,6 +800,9 @@ def api_scan():
     # Prefer env vars (safer in deployment) but fall back to config.json
     sms_user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
     sms_pass = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
+    # Auto-enable SMS if credentials are configured (no admin toggle needed).
+    if sms_user and sms_pass:
+        sms_enabled = True
     # SMS fires if creds are present AND (legacy sms_to is set OR there are phone subscribers).
     _has_phone_subs = any(s.get("active") and s.get("phone") for s in load_subscribers())
     sms_configured = sms_enabled and sms_user and sms_pass and (bool(sms_to) or _has_phone_subs)
