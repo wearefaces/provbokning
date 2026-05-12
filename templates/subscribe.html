@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Provbokningsbevakning – Anmäl dig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f9fb;--card:#fff;--border:#e2e5eb;--accent:#4f46e5;--accent2:#6366f1;
+  --green:#16a34a;--green-bg:rgba(22,163,74,.08);
+  --red:#dc2626;--red-bg:rgba(220,38,38,.06);
+  --text:#1e293b;--text2:#475569;--text3:#94a3b8;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,.07);
+  --radius:16px;--radius-sm:10px;
+}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;padding:24px}
+.wrap{width:100%;max-width:480px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px;box-shadow:var(--shadow-md)}
+h1{font-size:24px;font-weight:700;margin-bottom:8px;letter-spacing:-.02em}
+.sub{color:var(--text2);font-size:14px;line-height:1.55;margin-bottom:24px}
+.field{margin-bottom:14px}
+label{display:block;font-size:13px;font-weight:500;color:var(--text2);margin-bottom:6px}
+input{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:14px;background:#fff;color:var(--text);transition:border-color .15s,box-shadow .15s}
+input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.divider{display:flex;align-items:center;gap:12px;color:var(--text3);font-size:12px;margin:8px 0;text-transform:uppercase;letter-spacing:.08em}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border)}
+button{width:100%;padding:12px 16px;background:var(--accent);color:#fff;border:0;border-radius:var(--radius-sm);font:inherit;font-weight:600;font-size:14px;cursor:pointer;transition:background .15s,transform .05s}
+button:hover{background:var(--accent2)}
+button:active{transform:scale(.99)}
+button:disabled{opacity:.6;cursor:not-allowed}
+.msg{margin-top:16px;padding:12px 14px;border-radius:var(--radius-sm);font-size:13px;line-height:1.5;display:none}
+.msg.ok{display:block;background:var(--green-bg);color:var(--green);border:1px solid rgba(22,163,74,.2)}
+.msg.err{display:block;background:var(--red-bg);color:var(--red);border:1px solid rgba(220,38,38,.18)}
+.foot{margin-top:20px;font-size:12px;color:var(--text3);text-align:center;line-height:1.5}
+.foot a{color:var(--accent);text-decoration:none}
+.foot a:hover{text-decoration:underline}
+.hint{font-size:12px;color:var(--text3);margin-top:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Få notis om ledig provtid</h1>
+    <p class="sub">Anmäl dig så får du SMS eller e-post så fort vi hittar en ledig körprovstid hos Trafikverket. <span id="priceLabel"></span></p>
+
+    {% if thanks %}
+    <div class="msg ok" style="display:block"><strong>Tack för din prenumeration!</strong><br>Du får nu notiser så fort vi hittar en ledig provtid.</div>
+    {% elif unsubscribed %}
+    <div class="msg ok" style="display:block">Du är nu avregistrerad och kommer inte få fler notiser.</div>
+    {% else %}
+    <form id="form">
+      <div class="field">
+        <label for="name">Namn (valfritt)</label>
+        <input id="name" type="text" autocomplete="name" placeholder="Anna Andersson">
+      </div>
+      <div class="field">
+        <label for="phone">Telefonnummer för SMS</label>
+        <input id="phone" type="tel" autocomplete="tel" placeholder="070-123 45 67" inputmode="tel">
+        <div class="hint">Svenska nummer accepteras med eller utan landskod.</div>
+      </div>
+      <div class="divider">eller</div>
+      <div class="field">
+        <label for="email">E-postadress</label>
+        <input id="email" type="email" autocomplete="email" placeholder="du@example.com">
+        <div class="hint">Du kan ange båda om du vill ha notiser via båda kanaler.</div>
+      </div>
+      <button type="submit" id="submit">Anmäl mig</button>
+      <div id="msg" class="msg"></div>
+    </form>
+    {% endif %}
+
+    <!-- placeholder to keep structure -->
+
+    <div class="foot">Drivs av <strong>Provbokningsbevakning</strong></div>
+  </div>
+</div>
+
+<script>
+let payCfg = {stripe_enabled:false, price_label:''};
+fetch('/api/payment/config').then(r=>r.json()).then(c=>{
+  payCfg = c;
+  const lbl = document.getElementById('priceLabel');
+  const btn = document.getElementById('submit');
+  if (c.stripe_enabled && c.price_label){
+    lbl.innerHTML = '<strong>'+c.price_label+'</strong>';
+    if (btn) btn.textContent = 'Prenumerera ('+c.price_label+')';
+  } else {
+    lbl.textContent = '';
+  }
+}).catch(()=>{});
+
+const form = document.getElementById('form');
+const msg = document.getElementById('msg');
+const btn = document.getElementById('submit');
+
+if (form) form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  msg.className = 'msg';
+  msg.textContent = '';
+  btn.disabled = true;
+  btn.textContent = payCfg.stripe_enabled ? 'Skickar till betalning…' : 'Anmäler…';
+  try {
+    const res = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name:  document.getElementById('name').value,
+        phone: document.getElementById('phone').value,
+        email: document.getElementById('email').value,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      if (data.checkout_url){
+        window.location.href = data.checkout_url;
+        return;
+      }
+      msg.className = 'msg ok';
+      msg.textContent = data.updated
+        ? 'Din anmälan är uppdaterad!'
+        : 'Tack! Du är nu anmäld och får notis när en tid blir ledig.';
+      form.reset();
+    } else {
+      msg.className = 'msg err';
+      msg.textContent = data.error || 'Något gick fel. Försök igen.';
+    }
+  } catch (err) {
+    msg.className = 'msg err';
+    msg.textContent = 'Nätverksfel: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = payCfg.stripe_enabled ? ('Prenumerera ('+payCfg.price_label+')') : 'Anmäl mig';
+  }
+});
+</script>
+</body>
+</html>

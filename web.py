@@ -63,8 +63,13 @@ SUBSCRIBERS_PATH = DATA_DIR / "subscribers.json"
 LOGIN_USER = os.environ.get("LOGIN_USER") or os.environ.get("BASIC_AUTH_USER", "")
 LOGIN_PASS = os.environ.get("LOGIN_PASS") or os.environ.get("BASIC_AUTH_PASS", "")
 
-# Endpoints that don't require login (the login page itself + static files).
-_PUBLIC_ENDPOINTS = {"login", "static"}
+# Endpoints that don't require login (the public subscribe page + login + APIs).
+_PUBLIC_ENDPOINTS = {
+    "login", "static",
+    "public_subscribe_page",
+    "api_subscribe", "api_unsubscribe",
+    "subscribe_thanks", "api_payment_config", "stripe_webhook",
+}
 
 
 @app.before_request
@@ -361,6 +366,48 @@ def save_subscribers(subs: list[dict]):
         json.dump(subs, f, indent=2, ensure_ascii=False)
 
 
+# ── Stripe configuration ──
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "").strip()
+STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID", "").strip()
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+SUBSCRIPTION_PRICE_LABEL = os.environ.get("SUBSCRIPTION_PRICE_LABEL", "99 kr/mån").strip()
+
+_stripe = None
+if STRIPE_SECRET_KEY:
+    try:
+        import stripe as _stripe_mod  # type: ignore
+        _stripe_mod.api_key = STRIPE_SECRET_KEY
+        _stripe = _stripe_mod
+    except ImportError:
+        app.logger.warning("stripe package not installed; payment disabled")
+
+
+def stripe_enabled() -> bool:
+    return bool(_stripe and STRIPE_PRICE_ID)
+
+
+def is_sub_paid(sub: dict) -> bool:
+    """Return True if subscriber is allowed to receive notifications.
+    Without Stripe configured, all active subscribers count as paid (free mode).
+    With Stripe, requires `paid` flag and a future `paid_until` if set."""
+    if not sub.get("active"):
+        return False
+    if not stripe_enabled():
+        return True  # free mode while payment not configured
+    if not sub.get("paid"):
+        return False
+    pu = sub.get("paid_until")
+    if pu:
+        try:
+            until = datetime.fromisoformat(pu.replace("Z", "+00:00"))
+            if until < datetime.now(timezone.utc):
+                return False
+        except Exception:
+            pass
+    return True
+
+
 def _normalize_phone(p: str) -> str:
     p = re.sub(r"[\s\-()]", "", p or "")
     if p.startswith("00"):
@@ -453,9 +500,187 @@ def _fetch_location(ssn: str, exam_type_id: int, location_id: int,
 
 
 @app.route("/")
+def public_subscribe_page():
+    return render_template("subscribe.html")
+
+
+@app.route("/admin")
 def index():
     config = load_config()
     return render_template("index.html", config=config)
+
+
+# ── Subscriber API (public) ──
+
+
+@app.route("/api/subscribe", methods=["POST"])
+def api_subscribe():
+    data = request.get_json(silent=True) or {}
+    phone_raw = (data.get("phone") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    name = (data.get("name") or "").strip()[:80]
+
+    phone = _normalize_phone(phone_raw) if phone_raw else ""
+    if not phone and not email:
+        return jsonify({"ok": False, "error": "Ange telefonnummer eller e-post"}), 400
+    if phone and not _PHONE_RE.match(phone):
+        return jsonify({"ok": False, "error": "Ogiltigt telefonnummer"}), 400
+    if email and not _EMAIL_RE.match(email):
+        return jsonify({"ok": False, "error": "Ogiltig e-postadress"}), 400
+
+    subs = load_subscribers()
+    # Deduplicate by phone or email (re-activate if previously removed)
+    existing = None
+    for s in subs:
+        if (phone and s.get("phone") == phone) or (email and s.get("email") == email):
+            s["phone"] = phone or s.get("phone", "")
+            s["email"] = email or s.get("email", "")
+            if name:
+                s["name"] = name
+            s["active"] = True
+            existing = s
+            break
+
+    if existing is None:
+        existing = {
+            "id": str(uuid.uuid4()),
+            "name": name,
+            "phone": phone,
+            "email": email,
+            "active": True,
+            "paid": not stripe_enabled(),  # free mode = auto-paid
+            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "unsubscribe_token": uuid.uuid4().hex,
+        }
+        subs.append(existing)
+    save_subscribers(subs)
+
+    # If Stripe is configured, create a Checkout Session and return its URL
+    if stripe_enabled():
+        try:
+            base = request.host_url.rstrip("/")
+            customer_email = email or None
+            cs = _stripe.checkout.Session.create(
+                mode="subscription",
+                line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+                customer_email=customer_email,
+                client_reference_id=existing["id"],
+                success_url=f"{base}/subscribe/thanks?sid={existing['id']}",
+                cancel_url=f"{base}/?canceled=1",
+                metadata={"subscriber_id": existing["id"]},
+                allow_promotion_codes=True,
+                locale="sv",
+            )
+            return jsonify({"ok": True, "id": existing["id"], "checkout_url": cs.url})
+        except Exception as e:
+            app.logger.error("Stripe checkout create failed: %s", e)
+            return jsonify({"ok": False, "error": f"Betalsystemfel: {e}"}), 500
+
+    return jsonify({"ok": True, "id": existing["id"]})
+
+
+@app.route("/subscribe/thanks")
+def subscribe_thanks():
+    return render_template("subscribe.html", thanks=True)
+
+
+@app.route("/api/payment/config")
+def api_payment_config():
+    return jsonify({
+        "stripe_enabled": stripe_enabled(),
+        "price_label": SUBSCRIPTION_PRICE_LABEL,
+    })
+
+
+@app.route("/api/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    if not _stripe:
+        return jsonify({"ok": False, "error": "stripe not configured"}), 503
+    payload = request.get_data()
+    sig = request.headers.get("Stripe-Signature", "")
+    try:
+        if STRIPE_WEBHOOK_SECRET:
+            event = _stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+        else:
+            event = json.loads(payload.decode("utf-8"))
+    except Exception as e:
+        app.logger.error("Stripe webhook parse failed: %s", e)
+        return jsonify({"ok": False}), 400
+
+    etype = event["type"] if isinstance(event, dict) else event.type
+    obj = (event.get("data") or {}).get("object", {}) if isinstance(event, dict) else event["data"]["object"]
+
+    subs = load_subscribers()
+    changed = False
+
+    def _find_by_id(sid):
+        return next((x for x in subs if x.get("id") == sid), None)
+
+    def _find_by_customer(cust_id):
+        return next((x for x in subs if x.get("stripe_customer_id") == cust_id), None)
+
+    if etype == "checkout.session.completed":
+        sid = (obj.get("metadata") or {}).get("subscriber_id") or obj.get("client_reference_id")
+        sub = _find_by_id(sid) if sid else None
+        if sub:
+            sub["paid"] = True
+            sub["stripe_customer_id"] = obj.get("customer")
+            sub["stripe_subscription_id"] = obj.get("subscription")
+            sub["paid_until"] = (datetime.now(timezone.utc) + timedelta(days=33)).isoformat().replace("+00:00", "Z")
+            changed = True
+    elif etype in ("invoice.paid", "invoice.payment_succeeded"):
+        cust = obj.get("customer")
+        sub = _find_by_customer(cust) if cust else None
+        if sub:
+            sub["paid"] = True
+            sub["paid_until"] = (datetime.now(timezone.utc) + timedelta(days=33)).isoformat().replace("+00:00", "Z")
+            changed = True
+    elif etype in ("invoice.payment_failed", "customer.subscription.deleted"):
+        cust = obj.get("customer")
+        sub = _find_by_customer(cust) if cust else None
+        if sub:
+            sub["paid"] = False
+            changed = True
+
+    if changed:
+        save_subscribers(subs)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/unsubscribe", methods=["POST", "GET"])
+def api_unsubscribe():
+    token = request.args.get("token") or (request.get_json(silent=True) or {}).get("token", "")
+    if not token:
+        return jsonify({"ok": False, "error": "Missing token"}), 400
+    subs = load_subscribers()
+    found = None
+    for s in subs:
+        if s.get("unsubscribe_token") == token:
+            s["active"] = False
+            found = s
+            break
+    if not found:
+        return jsonify({"ok": False, "error": "Unknown token"}), 404
+    save_subscribers(subs)
+    if request.method == "GET":
+        return render_template("subscribe.html", unsubscribed=True)
+    return jsonify({"ok": True})
+
+
+# ── Subscriber API (admin) ──
+
+
+@app.route("/api/subscribers", methods=["GET"])
+def api_subscribers_list():
+    return jsonify(load_subscribers())
+
+
+@app.route("/api/subscribers/<sub_id>", methods=["DELETE"])
+def api_subscribers_delete(sub_id):
+    subs = load_subscribers()
+    subs = [s for s in subs if s.get("id") != sub_id]
+    save_subscribers(subs)
+    return jsonify({"ok": True})
 
 
 @app.route("/save_config", methods=["POST"])
@@ -474,11 +699,6 @@ def save_config_route():
     config["date_to"] = data.get("date_to", "2026-12-31")
     config["sms_enabled"] = data.get("sms_enabled", False)
     config["sms_to"] = data.get("sms_to", "").strip()
-    if "notify_phone" in data:
-        raw = (data.get("notify_phone") or "").strip()
-        config["notify_phone"] = _normalize_phone(raw) if raw else ""
-    if "notify_email" in data:
-        config["notify_email"] = (data.get("notify_email") or "").strip().lower()
     if "sms_api_username" in data:
         config["sms_api_username"] = data.get("sms_api_username", "").strip()
     if "sms_api_password" in data:
@@ -711,13 +931,14 @@ def api_scan():
     # Send SMS notification for slots not recently notified (independent of snapshot diff).
     # Using snapshot-based "added" alone is unreliable because a slot may already be in
     # the snapshot from a prior scan run, so we dedupe by slot key with a TTL instead.
-    sms_to = (config.get("notify_phone") or config.get("sms_to") or "").strip()
-    notify_email = (config.get("notify_email") or "").strip()
-    # Credentials are server-managed (env vars). User just provides their
-    # phone/email — we send if creds are configured.
+    sms_enabled = bool(config.get("sms_enabled"))
+    sms_to = config.get("sms_to", "").strip()
+    # Prefer env vars (safer in deployment) but fall back to config.json
     sms_user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
     sms_pass = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
-    sms_configured = bool(sms_user and sms_pass and sms_to)
+    # SMS fires if creds are present AND (legacy sms_to is set OR there are phone subscribers).
+    _has_phone_subs = any(is_sub_paid(s) and s.get("phone") for s in load_subscribers())
+    sms_configured = sms_enabled and sms_user and sms_pass and (bool(sms_to) or _has_phone_subs)
 
     ntfy_enabled = bool(config.get("ntfy_enabled"))
     ntfy_topic = (config.get("ntfy_topic") or "").strip()
@@ -768,39 +989,71 @@ def api_scan():
 
     if to_notify and sms_configured:
         msg = _build_message()
-        try:
-            sms_result = send_sms(sms_to, msg, sms_user, sms_pass)
-        except Exception as e:
-            app.logger.error("SMS send failed: %s", e)
-            sms_result = {"ok": False, "error": str(e)}
-        if sms_result.get("ok"):
+        # Collect all SMS recipients: legacy single sms_to + active subscribers
+        sms_recipients = []
+        if sms_to:
+            sms_recipients.append(sms_to)
+        for sub in load_subscribers():
+            if is_sub_paid(sub) and sub.get("phone") and sub["phone"] not in sms_recipients:
+                sms_recipients.append(sub["phone"])
+
+        sms_results = []
+        any_sms_ok = False
+        for recipient in sms_recipients:
+            try:
+                r = send_sms(recipient, msg, sms_user, sms_pass)
+            except Exception as e:
+                app.logger.error("SMS send failed to %s: %s", recipient, e)
+                r = {"ok": False, "error": str(e)}
+            if r.get("ok"):
+                any_sms_ok = True
+            sms_results.append({"to": recipient, "ok": r.get("ok"), "error": r.get("error")})
+
+        if any_sms_ok:
             any_sent_ok = True
+
         log = load_activity_log()
         log.append({
-            "type": "sms_sent" if sms_result.get("ok") else "sms_failed",
+            "type": "sms_sent" if any_sms_ok else "sms_failed",
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "to": sms_to,
+            "recipients": len(sms_recipients),
             "notified_count": len(to_notify),
-            "result": {k: sms_result.get(k) for k in ("ok", "status", "error") if k in sms_result},
+            "results": sms_results[:10],
         })
         save_activity_log(log)
 
-    # ── Email notification (single recipient) ──
-    if to_notify and notify_email:
-        try:
-            email_result = send_email(notify_email, "Ledig provtid hittad!", _build_message())
-        except Exception as e:
-            app.logger.error("Email send failed: %s", e)
-            email_result = {"ok": False, "error": str(e)}
-        if email_result.get("ok"):
+    # ── Email fan-out to subscribers with email ──
+    email_recipients = [s for s in load_subscribers()
+                        if is_sub_paid(s) and s.get("email")]
+    if to_notify and email_recipients:
+        msg_text = _build_message()
+        email_results = []
+        any_email_ok = False
+        base_url = request.host_url.rstrip("/") if request else ""
+        for sub in email_recipients:
+            unsub_link = f"{base_url}/api/unsubscribe?token={sub.get('unsubscribe_token','')}"
+            body = (
+                f"{msg_text}\n\n"
+                f"Boka direkt: https://fp.trafikverket.se/boka/ng\n\n"
+                f"Avregistrera: {unsub_link}\n"
+            )
+            try:
+                r = send_email(sub["email"], "Ledig provtid hittad!", body)
+            except Exception as e:
+                app.logger.error("Email send failed to %s: %s", sub["email"], e)
+                r = {"ok": False, "error": str(e)}
+            if r.get("ok"):
+                any_email_ok = True
+            email_results.append({"to": sub["email"], "ok": r.get("ok"), "error": r.get("error")})
+        if any_email_ok:
             any_sent_ok = True
         log = load_activity_log()
         log.append({
-            "type": "email_sent" if email_result.get("ok") else "email_failed",
+            "type": "email_sent" if any_email_ok else "email_failed",
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "to": notify_email,
+            "recipients": len(email_recipients),
             "notified_count": len(to_notify),
-            "result": {k: email_result.get(k) for k in ("ok", "error") if k in email_result},
+            "results": email_results[:10],
         })
         save_activity_log(log)
 
@@ -812,10 +1065,11 @@ def api_scan():
             notified[make_key(t)] = expiry
         save_sms_notified(notified)
 
-    if to_notify and not sms_configured and not ntfy_configured and not notify_email:
+    if to_notify and not sms_configured and not ntfy_configured:
         app.logger.info(
-            "New slots found (%d) but no notification channel configured",
-            len(to_notify),
+            "New slots found (%d) but no notification channel configured "
+            "(sms_enabled=%s, ntfy_enabled=%s)",
+            len(to_notify), sms_enabled, ntfy_enabled,
         )
         log = load_activity_log()
         log.append({
@@ -823,6 +1077,8 @@ def api_scan():
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "reason": "no_channel_configured",
             "notified_count": len(to_notify),
+            "sms_enabled": sms_enabled,
+            "ntfy_enabled": ntfy_enabled,
         })
         save_activity_log(log)
 
@@ -943,29 +1199,14 @@ def known_locations():
 
 @app.route("/api/sms/test", methods=["POST"])
 def api_sms_test():
-    """Send a test SMS to the user's configured phone."""
+    """Send a test SMS to verify 46elks credentials."""
     config = load_config()
+    to = config.get("sms_to", "")
     user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
     pwd = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
-    to = (config.get("notify_phone") or config.get("sms_to") or "").strip()
-    if not to:
-        return jsonify({"ok": False, "error": "Fyll i ditt telefonnummer först"})
-    if not user or not pwd:
-        return jsonify({"ok": False, "error": "SMS-tjänsten är inte konfigurerad på servern"})
+    if not to or not user or not pwd:
+        return jsonify({"ok": False, "error": "Fyll i telefonnummer och 46elks-uppgifter först"})
     result = send_sms(to, "Test från Provbokningsbevakning - SMS fungerar!", user, pwd)
-    return jsonify(result)
-
-
-@app.route("/api/email/test", methods=["POST"])
-def api_email_test():
-    """Send a test email to the user's configured email."""
-    config = load_config()
-    body = request.get_json(silent=True) or {}
-    to = (body.get("to") or config.get("notify_email") or "").strip()
-    if not to:
-        return jsonify({"ok": False, "error": "Fyll i din e-postadress först"})
-    result = send_email(to, "Provbok test",
-                        "Test från Provbokningsbevakning - e-post fungerar!")
     return jsonify(result)
 
 
@@ -981,6 +1222,18 @@ def api_ntfy_test():
     result = send_ntfy(topic, "Provbok test",
                         "Test från Provbokningsbevakning - ntfy fungerar!",
                         server=server)
+    return jsonify(result)
+
+
+@app.route("/api/email/test", methods=["POST"])
+def api_email_test():
+    """Send a test email to verify SMTP credentials."""
+    body = request.get_json(silent=True) or {}
+    to = (body.get("to") or "").strip()
+    if not to:
+        return jsonify({"ok": False, "error": "Ange mottagaradress"}), 400
+    result = send_email(to, "Provbok test",
+                        "Test från Provbokningsbevakning - e-post fungerar!")
     return jsonify(result)
 
 
