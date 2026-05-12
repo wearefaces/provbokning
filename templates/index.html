@@ -267,78 +267,34 @@ tr:hover td{background:var(--accent-bg)}
     </div>
 
     <!-- SMS Notifications -->
+    <!-- Notification channels -->
     <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)">
+      <div style="font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:10px">Notiskanaler</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:.85rem;color:var(--text2)">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="smsEnabled" {{ 'checked' if config.get('sms_enabled') }} style="width:18px;height:18px;accent-color:var(--accent)">
-          SMS-notiser
+          <span>Skicka SMS till prenumeranter (via 46elks)</span>
         </label>
-      </div>
-      <div id="smsFields" style="display:none">
-        <div class="card-row" style="margin-bottom:10px">
-          <div class="field"><label>Telefonnummer</label>
-            <input type="tel" id="smsTo" placeholder="+46XXXXXXXXX" value="{{ config.get('sms_to','') }}">
-          </div>
-          <div class="field" style="justify-content:flex-end">
-            <button class="btn btn-go btn-sm" onclick="testSms()" id="smsTestBtn" style="align-self:flex-end">Skicka test-SMS</button>
-          </div>
-        </div>
-        <div class="card-row" style="margin-bottom:10px">
-          <div class="field"><label>46elks API username</label>
-            <input type="text" id="smsApiUser" placeholder="uXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" value="{{ config.get('sms_api_username','') }}" autocomplete="off">
-          </div>
-          <div class="field"><label>46elks API password</label>
-            <input type="password" id="smsApiPass" placeholder="pXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" value="{{ config.get('sms_api_password','') }}" autocomplete="off">
-          </div>
-        </div>
-        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">Skaffa API-uppgifter på <a href="https://46elks.se/" target="_blank" rel="noopener" style="color:var(--accent)">46elks.se</a>. Ange ditt mobilnummer i internationellt format (+46...) för att få SMS när lediga tider hittas. Tips: i deployment kan du sätta miljövariablerna <code>SMS_API_USERNAME</code> och <code>SMS_API_PASSWORD</code> istället för att lagra dem här.</p>
-      </div>
-    </div>
-
-    <!-- ntfy / Windows push notifications -->
-    <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)">
-          <input type="checkbox" id="ntfyEnabled" {{ 'checked' if config.get('ntfy_enabled') }} style="width:18px;height:18px;accent-color:var(--accent)">
-          Windows push-notiser (ntfy)
-        </label>
-      </div>
-      <div id="ntfyFields" style="display:none">
-        <div class="card-row" style="margin-bottom:10px">
-          <div class="field"><label>Topic (valfritt namn, håll det hemligt)</label>
-            <input type="text" id="ntfyTopic" placeholder="t.ex. provbok-mittnamn-7g3h" value="{{ config.get('ntfy_topic','') }}">
-          </div>
-          <div class="field" style="justify-content:flex-end">
-            <button class="btn btn-go btn-sm" onclick="testNtfy()" id="ntfyTestBtn" style="align-self:flex-end">Skicka test-notis</button>
-          </div>
-        </div>
-        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">
-          Installera <a href="https://ntfy.sh/" target="_blank" style="color:var(--accent)">ntfy</a> på Windows
-          (eller öppna <code id="ntfyUrl" style="color:var(--accent)">https://ntfy.sh/&lt;topic&gt;</code> i webbläsaren)
-          och prenumerera på samma topic. Då får du toast-notiser i Windows när tider hittas — även om webbsidan är stängd.
+        <p style="font-size:.76rem;color:var(--text3);margin:0 0 0 26px">
+          API-uppgifter konfigureras som miljövariabler <code>SMS_API_USERNAME</code>/<code>SMS_API_PASSWORD</code> på servern.
+          <button class="btn btn-sm" type="button" onclick="testSms()" id="smsTestBtn" style="margin-left:8px;background:var(--card);border:1px solid var(--border);color:var(--text2);padding:4px 10px;font-size:.75rem">Test till första prenumerant</button>
         </p>
       </div>
     </div>
 
     <!-- SMTP / Email -->
     <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <span style="font-size:.9rem;font-weight:600;color:var(--text)">E-post (SMTP)</span>
-      </div>
+      <div style="font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:10px">E-post (SMTP)</div>
+      <p style="font-size:.76rem;color:var(--text3);margin-bottom:10px">
+        Konfigurera SMTP-server för att skicka e-postnotiser. Användaruppgifter sätts som miljövariabler
+        <code>SMTP_USER</code>/<code>SMTP_PASS</code> på servern.
+      </p>
       <div class="card-row" style="margin-bottom:10px">
         <div class="field"><label>SMTP-server</label>
           <input type="text" id="smtpHost" placeholder="smtp.gmail.com" value="{{ config.get('smtp_host','') }}" autocomplete="off">
         </div>
         <div class="field"><label>Port</label>
           <input type="number" id="smtpPort" placeholder="587" value="{{ config.get('smtp_port',587) }}" style="max-width:100px">
-        </div>
-      </div>
-      <div class="card-row" style="margin-bottom:10px">
-        <div class="field"><label>SMTP-användare</label>
-          <input type="text" id="smtpUser" placeholder="user@gmail.com" value="{{ config.get('smtp_user','') }}" autocomplete="off">
-        </div>
-        <div class="field"><label>Lösenord / app-lösenord</label>
-          <input type="password" id="smtpPass" placeholder="••••••••" value="{{ config.get('smtp_pass','') }}" autocomplete="off">
         </div>
       </div>
       <div class="card-row" style="margin-bottom:10px">
@@ -351,7 +307,7 @@ tr:hover td{background:var(--accent-bg)}
       </div>
       <p style="font-size:.76rem;color:var(--text3);margin-top:4px">
         För Gmail: använd port 587 och ett <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--accent)">app-lösenord</a>.
-        Eller sätt miljövariabler <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>, <code>SMTP_FROM</code>.
+        Inloggningsuppgifter sätts som miljövariabler <code>SMTP_USER</code> och <code>SMTP_PASS</code> på servern (visas inte här av säkerhetsskäl).
       </p>
     </div>
 
@@ -457,41 +413,15 @@ function playAlert(){
   }catch(e){}
 }
 
-/* ── SMS toggle ── */
-function initSmsToggle(){
-  var cb=document.getElementById('smsEnabled'),f=document.getElementById('smsFields');
-  function upd(){f.style.display=cb.checked?'block':'none'}
-  cb.addEventListener('change',upd);upd();
-}
+/* ── SMS test (sends to first active subscriber's phone) ── */
 async function testSms(){
-  var btn=document.getElementById('smsTestBtn');btn.disabled=true;btn.textContent='Skickar...';
+  var btn=document.getElementById('smsTestBtn');btn.disabled=true;var orig=btn.textContent;btn.textContent='Skickar...';
   await saveCfg();
   try{
     var r=await fetch('/api/sms/test',{method:'POST'});var d=await r.json();
     if(d.ok){showT('Test-SMS skickat!')}else{showT('SMS-fel: '+(d.error||d.data||'okänt'),true)}
   }catch(e){showT('Nätverksfel: '+e,true)}
-  btn.disabled=false;btn.textContent='Skicka test-SMS';
-}
-
-/* ── ntfy toggle ── */
-function initNtfyToggle(){
-  var cb=document.getElementById('ntfyEnabled'),f=document.getElementById('ntfyFields');
-  var inp=document.getElementById('ntfyTopic'),urlEl=document.getElementById('ntfyUrl');
-  function updUrl(){urlEl.textContent='https://ntfy.sh/'+(inp.value.trim()||'<topic>')}
-  function upd(){f.style.display=cb.checked?'block':'none';updUrl()}
-  cb.addEventListener('change',upd);inp.addEventListener('input',updUrl);upd();
-}
-async function testNtfy(){
-  var btn=document.getElementById('ntfyTestBtn');btn.disabled=true;btn.textContent='Skickar...';
-  var topic=document.getElementById('ntfyTopic').value.trim();
-  if(!topic){showT('Fyll i ett ntfy-topic först',true);btn.disabled=false;btn.textContent='Skicka test-notis';return}
-  await saveCfg();
-  try{
-    var r=await fetch('/api/ntfy/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:topic})});
-    var d=await r.json();
-    if(d.ok){showT('Test-notis skickad!')}else{showT('ntfy-fel: '+(d.error||d.data||'okänt'),true)}
-  }catch(e){showT('Nätverksfel: '+e,true)}
-  btn.disabled=false;btn.textContent='Skicka test-notis';
+  btn.disabled=false;btn.textContent=orig;
 }
 
 /* ── Email test ── */
@@ -501,7 +431,7 @@ async function testEmail(){
   var to=prompt('Skicka test-e-post till vilken adress?',document.getElementById('smtpFrom').value||'');
   if(!to){btn.disabled=false;btn.textContent='Skicka test-e-post';return}
   try{
-    var r=await fetch('/api/email/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:to})});
+    var r=await fetch('/api/email/test',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({to:to})});
     var d=await r.json();
     if(d.ok){showT('Test-e-post skickad till '+to)}else{showT('E-postfel: '+(d.error||'okänt'),true)}
   }catch(e){showT('Nätverksfel: '+e,true)}
@@ -534,7 +464,7 @@ async function delSub(id){
 }
 
 /* ── Init ── */
-(function(){loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();initSmsToggle();initNtfyToggle();loadSubs()})();
+(function(){loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();loadSubs()})();
 
 /* ── BankID Authentication ── */
 var authPollTimer=null;
@@ -689,11 +619,8 @@ function saveCfg(){
   return fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
     locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,
-    sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value,
-    sms_api_username:document.getElementById('smsApiUser').value,sms_api_password:document.getElementById('smsApiPass').value,
-    ntfy_enabled:document.getElementById('ntfyEnabled').checked,ntfy_topic:document.getElementById('ntfyTopic').value,
+    sms_enabled:document.getElementById('smsEnabled').checked,
     smtp_host:document.getElementById('smtpHost').value,smtp_port:document.getElementById('smtpPort').value,
-    smtp_user:document.getElementById('smtpUser').value,smtp_pass:document.getElementById('smtpPass').value,
     smtp_from:document.getElementById('smtpFrom').value
   })});
 }

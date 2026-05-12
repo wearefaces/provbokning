@@ -1063,14 +1063,23 @@ def known_locations():
 
 @app.route("/api/sms/test", methods=["POST"])
 def api_sms_test():
-    """Send a test SMS to verify 46elks credentials."""
+    """Send a test SMS using 46elks. Recipient = first active subscriber's phone."""
     config = load_config()
-    to = config.get("sms_to", "")
     user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
     pwd = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
-    if not to or not user or not pwd:
-        return jsonify({"ok": False, "error": "Fyll i telefonnummer och 46elks-uppgifter först"})
+    if not user or not pwd:
+        return jsonify({"ok": False, "error": "46elks-credentials saknas (sätt SMS_API_USERNAME/SMS_API_PASSWORD)"})
+    to = ""
+    for s in load_subscribers():
+        if s.get("active") and s.get("phone"):
+            to = s["phone"]
+            break
+    if not to:
+        to = config.get("sms_to", "").strip()
+    if not to:
+        return jsonify({"ok": False, "error": "Ingen prenumerant med telefonnummer hittad"})
     result = send_sms(to, "Test från Provbokningsbevakning - SMS fungerar!", user, pwd)
+    result["to"] = to
     return jsonify(result)
 
 
