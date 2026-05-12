@@ -109,7 +109,7 @@ Type=simple
 User=$APP_USER
 WorkingDirectory=/home/$APP_USER/provbokning
 EnvironmentFile=/etc/provbok.env
-ExecStart=/home/$APP_USER/provbokning/.venv/bin/gunicorn --bind 0.0.0.0:\${PORT} --workers 1 --threads 8 --timeout 120 web:app
+ExecStart=/home/$APP_USER/provbokning/.venv/bin/gunicorn --bind 0.0.0.0:$APP_PORT --workers 1 --threads 8 --timeout 120 web:app
 Restart=always
 RestartSec=5
 
