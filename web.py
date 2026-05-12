@@ -63,12 +63,8 @@ SUBSCRIBERS_PATH = DATA_DIR / "subscribers.json"
 LOGIN_USER = os.environ.get("LOGIN_USER") or os.environ.get("BASIC_AUTH_USER", "")
 LOGIN_PASS = os.environ.get("LOGIN_PASS") or os.environ.get("BASIC_AUTH_PASS", "")
 
-# Endpoints that don't require login (the public subscribe page + login + APIs).
-_PUBLIC_ENDPOINTS = {
-    "login", "static",
-    "public_subscribe_page",
-    "api_subscribe", "api_unsubscribe",
-}
+# Endpoints that don't require login (the login page itself + static files).
+_PUBLIC_ENDPOINTS = {"login", "static"}
 
 
 @app.before_request
@@ -457,94 +453,9 @@ def _fetch_location(ssn: str, exam_type_id: int, location_id: int,
 
 
 @app.route("/")
-def public_subscribe_page():
-    return render_template("subscribe.html")
-
-
-@app.route("/admin")
 def index():
     config = load_config()
     return render_template("index.html", config=config)
-
-
-# ── Subscriber API (public) ──
-
-
-@app.route("/api/subscribe", methods=["POST"])
-def api_subscribe():
-    data = request.get_json(silent=True) or {}
-    phone_raw = (data.get("phone") or "").strip()
-    email = (data.get("email") or "").strip().lower()
-    name = (data.get("name") or "").strip()[:80]
-
-    phone = _normalize_phone(phone_raw) if phone_raw else ""
-    if not phone and not email:
-        return jsonify({"ok": False, "error": "Ange telefonnummer eller e-post"}), 400
-    if phone and not _PHONE_RE.match(phone):
-        return jsonify({"ok": False, "error": "Ogiltigt telefonnummer"}), 400
-    if email and not _EMAIL_RE.match(email):
-        return jsonify({"ok": False, "error": "Ogiltig e-postadress"}), 400
-
-    subs = load_subscribers()
-    # Deduplicate by phone or email (re-activate if previously removed)
-    for s in subs:
-        if (phone and s.get("phone") == phone) or (email and s.get("email") == email):
-            s["phone"] = phone or s.get("phone", "")
-            s["email"] = email or s.get("email", "")
-            if name:
-                s["name"] = name
-            s["active"] = True
-            save_subscribers(subs)
-            return jsonify({"ok": True, "id": s["id"], "updated": True})
-
-    sub = {
-        "id": str(uuid.uuid4()),
-        "name": name,
-        "phone": phone,
-        "email": email,
-        "active": True,
-        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "unsubscribe_token": uuid.uuid4().hex,
-    }
-    subs.append(sub)
-    save_subscribers(subs)
-    return jsonify({"ok": True, "id": sub["id"]})
-
-
-@app.route("/api/unsubscribe", methods=["POST", "GET"])
-def api_unsubscribe():
-    token = request.args.get("token") or (request.get_json(silent=True) or {}).get("token", "")
-    if not token:
-        return jsonify({"ok": False, "error": "Missing token"}), 400
-    subs = load_subscribers()
-    found = None
-    for s in subs:
-        if s.get("unsubscribe_token") == token:
-            s["active"] = False
-            found = s
-            break
-    if not found:
-        return jsonify({"ok": False, "error": "Unknown token"}), 404
-    save_subscribers(subs)
-    if request.method == "GET":
-        return render_template("subscribe.html", unsubscribed=True)
-    return jsonify({"ok": True})
-
-
-# ── Subscriber API (admin) ──
-
-
-@app.route("/api/subscribers", methods=["GET"])
-def api_subscribers_list():
-    return jsonify(load_subscribers())
-
-
-@app.route("/api/subscribers/<sub_id>", methods=["DELETE"])
-def api_subscribers_delete(sub_id):
-    subs = load_subscribers()
-    subs = [s for s in subs if s.get("id") != sub_id]
-    save_subscribers(subs)
-    return jsonify({"ok": True})
 
 
 @app.route("/save_config", methods=["POST"])
@@ -563,6 +474,11 @@ def save_config_route():
     config["date_to"] = data.get("date_to", "2026-12-31")
     config["sms_enabled"] = data.get("sms_enabled", False)
     config["sms_to"] = data.get("sms_to", "").strip()
+    if "notify_phone" in data:
+        raw = (data.get("notify_phone") or "").strip()
+        config["notify_phone"] = _normalize_phone(raw) if raw else ""
+    if "notify_email" in data:
+        config["notify_email"] = (data.get("notify_email") or "").strip().lower()
     if "sms_api_username" in data:
         config["sms_api_username"] = data.get("sms_api_username", "").strip()
     if "sms_api_password" in data:
@@ -795,17 +711,13 @@ def api_scan():
     # Send SMS notification for slots not recently notified (independent of snapshot diff).
     # Using snapshot-based "added" alone is unreliable because a slot may already be in
     # the snapshot from a prior scan run, so we dedupe by slot key with a TTL instead.
-    sms_enabled = bool(config.get("sms_enabled"))
-    sms_to = config.get("sms_to", "").strip()
-    # Prefer env vars (safer in deployment) but fall back to config.json
+    sms_to = (config.get("notify_phone") or config.get("sms_to") or "").strip()
+    notify_email = (config.get("notify_email") or "").strip()
+    # Credentials are server-managed (env vars). User just provides their
+    # phone/email — we send if creds are configured.
     sms_user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
     sms_pass = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
-    # Auto-enable SMS if credentials are configured (no admin toggle needed).
-    if sms_user and sms_pass:
-        sms_enabled = True
-    # SMS fires if creds are present AND (legacy sms_to is set OR there are phone subscribers).
-    _has_phone_subs = any(s.get("active") and s.get("phone") for s in load_subscribers())
-    sms_configured = sms_enabled and sms_user and sms_pass and (bool(sms_to) or _has_phone_subs)
+    sms_configured = bool(sms_user and sms_pass and sms_to)
 
     ntfy_enabled = bool(config.get("ntfy_enabled"))
     ntfy_topic = (config.get("ntfy_topic") or "").strip()
@@ -856,71 +768,39 @@ def api_scan():
 
     if to_notify and sms_configured:
         msg = _build_message()
-        # Collect all SMS recipients: legacy single sms_to + active subscribers
-        sms_recipients = []
-        if sms_to:
-            sms_recipients.append(sms_to)
-        for sub in load_subscribers():
-            if sub.get("active") and sub.get("phone") and sub["phone"] not in sms_recipients:
-                sms_recipients.append(sub["phone"])
-
-        sms_results = []
-        any_sms_ok = False
-        for recipient in sms_recipients:
-            try:
-                r = send_sms(recipient, msg, sms_user, sms_pass)
-            except Exception as e:
-                app.logger.error("SMS send failed to %s: %s", recipient, e)
-                r = {"ok": False, "error": str(e)}
-            if r.get("ok"):
-                any_sms_ok = True
-            sms_results.append({"to": recipient, "ok": r.get("ok"), "error": r.get("error")})
-
-        if any_sms_ok:
+        try:
+            sms_result = send_sms(sms_to, msg, sms_user, sms_pass)
+        except Exception as e:
+            app.logger.error("SMS send failed: %s", e)
+            sms_result = {"ok": False, "error": str(e)}
+        if sms_result.get("ok"):
             any_sent_ok = True
-
         log = load_activity_log()
         log.append({
-            "type": "sms_sent" if any_sms_ok else "sms_failed",
+            "type": "sms_sent" if sms_result.get("ok") else "sms_failed",
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "recipients": len(sms_recipients),
+            "to": sms_to,
             "notified_count": len(to_notify),
-            "results": sms_results[:10],
+            "result": {k: sms_result.get(k) for k in ("ok", "status", "error") if k in sms_result},
         })
         save_activity_log(log)
 
-    # ── Email fan-out to subscribers with email ──
-    email_recipients = [s for s in load_subscribers()
-                        if s.get("active") and s.get("email")]
-    if to_notify and email_recipients:
-        msg_text = _build_message()
-        email_results = []
-        any_email_ok = False
-        base_url = request.host_url.rstrip("/") if request else ""
-        for sub in email_recipients:
-            unsub_link = f"{base_url}/api/unsubscribe?token={sub.get('unsubscribe_token','')}"
-            body = (
-                f"{msg_text}\n\n"
-                f"Boka direkt: https://fp.trafikverket.se/boka/ng\n\n"
-                f"Avregistrera: {unsub_link}\n"
-            )
-            try:
-                r = send_email(sub["email"], "Ledig provtid hittad!", body)
-            except Exception as e:
-                app.logger.error("Email send failed to %s: %s", sub["email"], e)
-                r = {"ok": False, "error": str(e)}
-            if r.get("ok"):
-                any_email_ok = True
-            email_results.append({"to": sub["email"], "ok": r.get("ok"), "error": r.get("error")})
-        if any_email_ok:
+    # ── Email notification (single recipient) ──
+    if to_notify and notify_email:
+        try:
+            email_result = send_email(notify_email, "Ledig provtid hittad!", _build_message())
+        except Exception as e:
+            app.logger.error("Email send failed: %s", e)
+            email_result = {"ok": False, "error": str(e)}
+        if email_result.get("ok"):
             any_sent_ok = True
         log = load_activity_log()
         log.append({
-            "type": "email_sent" if any_email_ok else "email_failed",
+            "type": "email_sent" if email_result.get("ok") else "email_failed",
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "recipients": len(email_recipients),
+            "to": notify_email,
             "notified_count": len(to_notify),
-            "results": email_results[:10],
+            "result": {k: email_result.get(k) for k in ("ok", "error") if k in email_result},
         })
         save_activity_log(log)
 
@@ -932,11 +812,10 @@ def api_scan():
             notified[make_key(t)] = expiry
         save_sms_notified(notified)
 
-    if to_notify and not sms_configured and not ntfy_configured:
+    if to_notify and not sms_configured and not ntfy_configured and not notify_email:
         app.logger.info(
-            "New slots found (%d) but no notification channel configured "
-            "(sms_enabled=%s, ntfy_enabled=%s)",
-            len(to_notify), sms_enabled, ntfy_enabled,
+            "New slots found (%d) but no notification channel configured",
+            len(to_notify),
         )
         log = load_activity_log()
         log.append({
@@ -944,8 +823,6 @@ def api_scan():
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "reason": "no_channel_configured",
             "notified_count": len(to_notify),
-            "sms_enabled": sms_enabled,
-            "ntfy_enabled": ntfy_enabled,
         })
         save_activity_log(log)
 
@@ -1066,23 +943,29 @@ def known_locations():
 
 @app.route("/api/sms/test", methods=["POST"])
 def api_sms_test():
-    """Send a test SMS using 46elks. Recipient = first active subscriber's phone."""
+    """Send a test SMS to the user's configured phone."""
     config = load_config()
     user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
     pwd = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
+    to = (config.get("notify_phone") or config.get("sms_to") or "").strip()
+    if not to:
+        return jsonify({"ok": False, "error": "Fyll i ditt telefonnummer först"})
     if not user or not pwd:
-        return jsonify({"ok": False, "error": "46elks-credentials saknas (sätt SMS_API_USERNAME/SMS_API_PASSWORD)"})
-    to = ""
-    for s in load_subscribers():
-        if s.get("active") and s.get("phone"):
-            to = s["phone"]
-            break
-    if not to:
-        to = config.get("sms_to", "").strip()
-    if not to:
-        return jsonify({"ok": False, "error": "Ingen prenumerant med telefonnummer hittad"})
+        return jsonify({"ok": False, "error": "SMS-tjänsten är inte konfigurerad på servern"})
     result = send_sms(to, "Test från Provbokningsbevakning - SMS fungerar!", user, pwd)
-    result["to"] = to
+    return jsonify(result)
+
+
+@app.route("/api/email/test", methods=["POST"])
+def api_email_test():
+    """Send a test email to the user's configured email."""
+    config = load_config()
+    body = request.get_json(silent=True) or {}
+    to = (body.get("to") or config.get("notify_email") or "").strip()
+    if not to:
+        return jsonify({"ok": False, "error": "Fyll i din e-postadress först"})
+    result = send_email(to, "Provbok test",
+                        "Test från Provbokningsbevakning - e-post fungerar!")
     return jsonify(result)
 
 
@@ -1098,18 +981,6 @@ def api_ntfy_test():
     result = send_ntfy(topic, "Provbok test",
                         "Test från Provbokningsbevakning - ntfy fungerar!",
                         server=server)
-    return jsonify(result)
-
-
-@app.route("/api/email/test", methods=["POST"])
-def api_email_test():
-    """Send a test email to verify SMTP credentials."""
-    body = request.get_json(silent=True) or {}
-    to = (body.get("to") or "").strip()
-    if not to:
-        return jsonify({"ok": False, "error": "Ange mottagaradress"}), 400
-    result = send_email(to, "Provbok test",
-                        "Test från Provbokningsbevakning - e-post fungerar!")
     return jsonify(result)
 
 

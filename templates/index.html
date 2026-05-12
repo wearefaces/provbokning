@@ -266,15 +266,26 @@ tr:hover td{background:var(--accent-bg)}
       <div class="field"><label>Till datum</label><input type="date" id="dtTo" value="{{ config.date_to }}"></div>
     </div>
 
-    <!-- SMS Notifications -->
-    <!-- Prenumeranter -->
+    <!-- Notiser -->
     <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px">
-        <span style="font-size:.9rem;font-weight:600;color:var(--text)">Prenumeranter <span id="subCount" style="color:var(--text3);font-weight:400"></span></span>
-        <button class="btn btn-sm" onclick="loadSubs()" style="background:var(--card);border:1px solid var(--border);color:var(--text2)">Uppdatera</button>
+      <div style="font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:10px">Notiser när ledig tid hittas</div>
+      <div class="card-row" style="margin-bottom:10px">
+        <div class="field"><label>Telefonnummer (SMS)</label>
+          <input type="tel" id="notifyPhone" placeholder="070-123 45 67" value="{{ config.get('notify_phone','') }}" autocomplete="tel">
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <button class="btn btn-go btn-sm" type="button" onclick="testSms()" style="align-self:flex-end">Skicka test-SMS</button>
+        </div>
       </div>
-      <div id="subsList" style="font-size:.85rem;color:var(--text2)">Laddar…</div>
-      <p style="font-size:.76rem;color:var(--text3);margin-top:8px">Anmälningar kommer in via den publika sidan på <a href="/" target="_blank" style="color:var(--accent)">/</a>.</p>
+      <div class="card-row" style="margin-bottom:6px">
+        <div class="field"><label>E-postadress</label>
+          <input type="email" id="notifyEmail" placeholder="du@example.com" value="{{ config.get('notify_email','') }}" autocomplete="email">
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <button class="btn btn-go btn-sm" type="button" onclick="testEmail()" style="align-self:flex-end">Skicka test-e-post</button>
+        </div>
+      </div>
+      <p style="font-size:.76rem;color:var(--text3);margin-top:4px">Lämna tomt för att stänga av respektive kanal. Tjänsten är gratis.</p>
     </div>
 
 
@@ -369,8 +380,9 @@ function playAlert(){
   }catch(e){}
 }
 
-/* ── SMS test (sends to first active subscriber's phone) ── */
+/* ── SMS test (sends to configured phone) ── */
 async function testSms(){
+  await saveCfg();
   try{
     var r=await fetch('/api/sms/test',{method:'POST'});var d=await r.json();
     if(d.ok){showT('Test-SMS skickat!')}else{showT('SMS-fel: '+(d.error||d.data||'okänt'),true)}
@@ -379,8 +391,9 @@ async function testSms(){
 
 /* ── Email test ── */
 async function testEmail(){
-  var to=prompt('Skicka test-e-post till vilken adress?','');
-  if(!to)return;
+  await saveCfg();
+  var to=document.getElementById('notifyEmail').value.trim();
+  if(!to){showT('Fyll i e-postadress först',true);return}
   try{
     var r=await fetch('/api/email/test',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({to:to})});
     var d=await r.json();
@@ -388,33 +401,8 @@ async function testEmail(){
   }catch(e){showT('Nätverksfel: '+e,true)}
 }
 
-/* ── Subscribers ── */
-function escapeHtml(s){return (s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-async function loadSubs(){
-  var el=document.getElementById('subsList');el.textContent='Laddar…';
-  try{
-    var r=await fetch('/api/subscribers');var subs=await r.json();
-    document.getElementById('subCount').textContent='('+subs.length+')';
-    if(!subs.length){el.innerHTML='<div style="color:var(--text3);font-style:italic">Inga prenumeranter än.</div>';return}
-    el.innerHTML=subs.map(function(s){
-      var contact=[s.phone,s.email].filter(Boolean).map(escapeHtml).join(' · ');
-      var status=s.active?'<span style="color:var(--green)">aktiv</span>':'<span style="color:var(--text3)">avregistrerad</span>';
-      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--card)">'
-        +'<div style="min-width:0;flex:1"><div style="font-weight:500;color:var(--text)">'+(escapeHtml(s.name)||'(utan namn)')+' — '+status+'</div>'
-        +'<div style="font-size:.8rem;color:var(--text2);overflow:hidden;text-overflow:ellipsis">'+contact+'</div></div>'
-        +'<button onclick="delSub(\''+s.id+'\')" class="btn btn-sm" style="background:var(--card);border:1px solid var(--border);color:var(--red)">Ta bort</button>'
-        +'</div>';
-    }).join('');
-  }catch(e){el.textContent='Kunde inte ladda prenumeranter: '+e}
-}
-async function delSub(id){
-  if(!confirm('Ta bort prenumeranten?'))return;
-  await fetch('/api/subscribers/'+id,{method:'DELETE'});
-  loadSubs();
-}
-
 /* ── Init ── */
-(function(){loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();loadSubs()})();
+(function(){loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission()})();
 
 /* ── BankID Authentication ── */
 var authPollTimer=null;
@@ -568,7 +556,8 @@ function stopTmr(){if(tmrI)clearInterval(tmrI);tmrI=null}
 function saveCfg(){
   return fetch('/save_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
-    locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value
+    locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,
+    notify_phone:document.getElementById('notifyPhone').value,notify_email:document.getElementById('notifyEmail').value
   })});
 }
 
