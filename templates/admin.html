@@ -14,7 +14,7 @@
   --green:#16a34a;--red:#dc2626;--red-bg:#fdeaea;--red-border:rgba(220,38,38,.22);
   --text:#0f172a;--text2:#475569;--text3:#94a3b8;
   --shadow:0 1px 2px rgba(15,23,42,.04);
-  --radius:24px;--radius-sm:14px;
+  --radius:14px;--radius-sm:10px;
 }
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 .app{max-width:780px;margin:0 auto;padding:28px 18px 100px}
@@ -24,13 +24,13 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .hdr p{color:var(--text3);font-size:.9rem;margin-top:8px}
 .hdr .meta{font-size:.78rem;color:var(--text3);margin-top:10px}
 .hdr .meta a{color:var(--text2);text-decoration:none;margin:0 8px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:20px;box-shadow:var(--shadow)}
 .card h3{font-size:.78rem;color:var(--text3);font-weight:700;margin-bottom:16px;text-transform:uppercase;letter-spacing:.08em}
 .card-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px}
 @media(max-width:600px){.card-row{grid-template-columns:1fr}}
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{font-size:.74rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
-.field input{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:11px 14px;font-size:.92rem;font-family:inherit}
+.field input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;font-size:.92rem;font-family:inherit}
 .field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .btn{padding:10px 22px;border:0;border-radius:999px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
 .btn-go{background:var(--accent);color:#fff}.btn-go:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 6px 14px rgba(17,24,39,.18)}

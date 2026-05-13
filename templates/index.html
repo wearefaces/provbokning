@@ -36,8 +36,8 @@
   --shadow:0 1px 2px rgba(15,23,42,.04);
   --shadow-md:0 6px 20px rgba(15,23,42,.06);
   --shadow-lg:0 20px 60px rgba(15,23,42,.12);
-  --radius:24px;
-  --radius-sm:14px;
+  --radius:14px;
+  --radius-sm:10px;
 }
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
 .app{max-width:880px;margin:0 auto;padding:28px 18px 100px}
@@ -54,7 +54,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .badges .b3{background:var(--green-bg);color:#15803d}
 
 /* Status bar */
-.status-bar{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin:20px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:var(--shadow)}
+.status-bar{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;margin:20px 0 28px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:var(--shadow)}
 .st-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .st-dot.on{background:var(--green);box-shadow:0 0 0 3px var(--green-bg)}.st-dot.off{background:var(--text3)}
 .st-lbl{font-weight:600;font-size:.9rem;color:var(--text)}.st-lbl span{color:var(--text2);font-weight:400}
@@ -76,7 +76,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .mode-b.on{display:none}
 
 /* Cards */
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:22px;box-shadow:var(--shadow)}
 .card h3{font-size:.78rem;color:var(--text3);font-weight:700;margin-bottom:16px;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:8px}
 .card-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:600px){.card-row{grid-template-columns:1fr}}
@@ -84,7 +84,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 /* Form */
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{font-size:.75rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-.field input,.field select{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--text);font-size:.92rem;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+.field input,.field select{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:.92rem;font-family:inherit;transition:border-color .15s,box-shadow .15s}
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 
 /* Collapsible */
@@ -115,7 +115,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .loc-card .badge-times{font-size:.7rem;background:var(--green-bg);color:var(--green);padding:2px 7px;border-radius:10px;font-weight:600;white-space:nowrap}
 
 /* Scan progress */
-.scanp{margin-top:12px;display:none}.scanp.on{display:block}
+.scanp{margin:18px 0 24px;display:none}.scanp.on{display:block}
 .scanp-bar{background:var(--card2);border-radius:6px;height:4px;overflow:hidden;margin-top:6px}
 .scanp-fill{background:linear-gradient(90deg,var(--accent),var(--green));height:100%;width:0%;transition:width .3s;border-radius:6px}
 .scanp-txt{font-size:.78rem;color:var(--text3);display:flex;justify-content:space-between}
