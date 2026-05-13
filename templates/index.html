@@ -857,6 +857,19 @@ function confirmBk(){
   // Keep the slot visible so the user can compare it against the Trafikverket window.
   bookedSlot=sl;activeRes=null;foundSlot=null;
   renderRes();if(resI)clearInterval(resI);
+  // Re-verify the slot in the background; if Trafikverket no longer shows it
+  // (taken by someone else, or pulled from the pool), warn the user.
+  verifySlotInBackground(sl);
+}
+function verifySlotInBackground(sl){
+  fetch('/api/verify_slot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot:sl})})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(!d||!d.ok)return;
+      if(!d.still_available){
+        showT('Obs: tiden är inte längre ledig hos Trafikverket. Någon hann boka den. Vi fortsätter söka.',true);
+      }
+    }).catch(function(){});
 }
 async function dismissRes(){
   if(!activeRes)return;

@@ -1441,6 +1441,41 @@ def api_update_reservation(res_id):
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/verify_slot", methods=["POST"])
+def api_verify_slot():
+    """Re-query Trafikverket for a single location right before the user clicks
+    Boka, to detect slots that have already been taken (the most common reason
+    a found slot does not appear when the user lands on Trafikverket)."""
+    if not auth_state["authenticated"]:
+        return jsonify({"ok": False, "error": "Not authenticated"}), 401
+    data = request.get_json(silent=True) or {}
+    slot = data.get("slot") or {}
+    location_id = slot.get("location_id")
+    date = slot.get("date", "")
+    time = slot.get("time", "")
+    if not location_id or not date or not time:
+        return jsonify({"ok": False, "error": "missing slot fields"}), 400
+
+    config = load_config()
+    ssn = config.get("swedish_ssn", "")
+    exam_type = config.get("exam_type", "Körprov")
+    licence_type = config.get("licence_type", "B")
+    lp = LICENCE_PARAMS.get(licence_type, LICENCE_PARAMS["B"])
+    exam_type_id = lp["exam_ids"].get(exam_type, EXAM_TYPE_IDS.get(exam_type, 12))
+
+    fresh = _fetch_location(ssn, exam_type_id, location_id,
+                            lp["licence_id"], lp["vehicle_type_id"])
+    still_there = any(
+        t.get("date") == date and t.get("time") == time for t in fresh
+    )
+    return jsonify({
+        "ok": True,
+        "still_available": still_there,
+        "checked_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "alternatives_count": len(fresh),
+    })
+
+
 @app.route("/api/reservations")
 def api_reservations():
     """Return active reservations (not expired/dismissed)."""
