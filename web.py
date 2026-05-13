@@ -57,6 +57,7 @@ RESERVATIONS_PATH = DATA_DIR / "reservations.json"
 LOG_PATH = DATA_DIR / "activity_log.json"
 SMS_NOTIFIED_PATH = DATA_DIR / "sms_notified.json"
 SUBSCRIBERS_PATH = DATA_DIR / "subscribers.json"
+PAID_SESSIONS_PATH = DATA_DIR / "paid_sessions.json"
 
 # ── Login (form-based session auth; set LOGIN_USER + LOGIN_PASS env vars) ──
 # Backwards compatible with the old BASIC_AUTH_USER / BASIC_AUTH_PASS names.
@@ -373,6 +374,81 @@ def save_subscribers(subs: list[dict]):
         json.dump(subs, f, indent=2, ensure_ascii=False)
 
 
+# ── Paid sessions (demo → live upgrade tied to Flask session) ──
+
+def load_paid_sessions() -> dict:
+    if not PAID_SESSIONS_PATH.exists():
+        return {}
+    try:
+        with open(PAID_SESSIONS_PATH, "r") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def save_paid_sessions(d: dict):
+    with open(PAID_SESSIONS_PATH, "w") as f:
+        json.dump(d, f, indent=2, ensure_ascii=False)
+
+
+def _current_sid() -> str:
+    """Stable per-browser session id used as Stripe client_reference_id."""
+    sid = session.get("sid")
+    if not sid:
+        sid = uuid.uuid4().hex
+        session["sid"] = sid
+        session.permanent = True
+    return sid
+
+
+def is_session_paid() -> bool:
+    """Return True if current visitor has an active paid subscription."""
+    sid = session.get("sid")
+    if not sid:
+        return False
+    store = load_paid_sessions()
+    entry = store.get(sid)
+    if not entry or not entry.get("paid"):
+        return False
+    pu = entry.get("paid_until")
+    if pu:
+        try:
+            until = datetime.fromisoformat(pu.replace("Z", "+00:00"))
+            if until < datetime.now(timezone.utc):
+                return False
+        except Exception:
+            pass
+    return True
+
+
+def mark_session_paid(sid: str, customer_id: str = "", subscription_id: str = "",
+                     days: int = 33):
+    store = load_paid_sessions()
+    until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat().replace("+00:00", "Z")
+    store[sid] = {
+        "paid": True,
+        "paid_until": until,
+        "stripe_customer_id": customer_id or store.get(sid, {}).get("stripe_customer_id", ""),
+        "stripe_subscription_id": subscription_id or store.get(sid, {}).get("stripe_subscription_id", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    save_paid_sessions(store)
+
+
+def mark_session_unpaid_by_customer(customer_id: str):
+    if not customer_id:
+        return
+    store = load_paid_sessions()
+    changed = False
+    for sid, entry in store.items():
+        if entry.get("stripe_customer_id") == customer_id and entry.get("paid"):
+            entry["paid"] = False
+            entry["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            changed = True
+    if changed:
+        save_paid_sessions(store)
+
+
 # ── Stripe configuration ──
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "").strip()
@@ -639,6 +715,69 @@ def api_payment_config():
     })
 
 
+# ── Billing: demo → live upgrade for the BankID app ──
+
+@app.route("/api/billing/status")
+def api_billing_status():
+    """Returns whether the current visitor has live access or is in demo mode."""
+    sid = _current_sid()
+    paid = is_session_paid()
+    entry = load_paid_sessions().get(sid, {})
+    return jsonify({
+        "paid": paid,
+        "demo": not paid,
+        "stripe_enabled": stripe_enabled(),
+        "price_label": SUBSCRIPTION_PRICE_LABEL,
+        "paid_until": entry.get("paid_until") if paid else None,
+    })
+
+
+@app.route("/api/billing/checkout", methods=["POST"])
+def api_billing_checkout():
+    """Create a Stripe Checkout Session to upgrade the current visitor to live."""
+    if not stripe_enabled():
+        return jsonify({"ok": False, "error": "Betalning är inte konfigurerad än"}), 503
+    sid = _current_sid()
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower() or None
+    try:
+        base = request.host_url.rstrip("/")
+        cs = _stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+            customer_email=email,
+            client_reference_id=f"sid:{sid}",
+            success_url=f"{base}/billing/thanks?cs={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{base}/app?billing=canceled",
+            metadata={"sid": sid},
+            allow_promotion_codes=True,
+            locale="sv",
+        )
+        return jsonify({"ok": True, "checkout_url": cs.url})
+    except Exception as e:
+        app.logger.error("Billing checkout create failed: %s", e)
+        return jsonify({"ok": False, "error": f"Betalsystemfel: {e}"}), 500
+
+
+@app.route("/billing/thanks")
+def billing_thanks():
+    """Stripe success_url. Verify the checkout session and mark visitor as paid."""
+    cs_id = request.args.get("cs", "")
+    if _stripe and cs_id and cs_id != "{CHECKOUT_SESSION_ID}":
+        try:
+            cs = _stripe.checkout.Session.retrieve(cs_id)
+            ref = cs.get("client_reference_id") or ""
+            if ref.startswith("sid:") and cs.get("payment_status") == "paid":
+                mark_session_paid(
+                    ref[4:],
+                    customer_id=cs.get("customer") or "",
+                    subscription_id=cs.get("subscription") or "",
+                )
+        except Exception as e:
+            app.logger.error("billing/thanks verify failed: %s", e)
+    return redirect("/app?billing=success")
+
+
 @app.route("/api/stripe/webhook", methods=["POST"])
 def stripe_webhook():
     if not _stripe:
@@ -667,7 +806,17 @@ def stripe_webhook():
         return next((x for x in subs if x.get("stripe_customer_id") == cust_id), None)
 
     if etype == "checkout.session.completed":
-        sid = (obj.get("metadata") or {}).get("subscriber_id") or obj.get("client_reference_id")
+        ref = obj.get("client_reference_id") or ""
+        # New flow: sid:<flask-session-id> — paid app access
+        if ref.startswith("sid:"):
+            mark_session_paid(
+                ref[4:],
+                customer_id=obj.get("customer") or "",
+                subscription_id=obj.get("subscription") or "",
+            )
+            return jsonify({"ok": True})
+        # Legacy flow: subscriber id (SMS/email notification list)
+        sid = (obj.get("metadata") or {}).get("subscriber_id") or ref
         sub = _find_by_id(sid) if sid else None
         if sub:
             sub["paid"] = True
@@ -677,6 +826,14 @@ def stripe_webhook():
             changed = True
     elif etype in ("invoice.paid", "invoice.payment_succeeded"):
         cust = obj.get("customer")
+        # Renew any matching paid_sessions entry
+        if cust:
+            store = load_paid_sessions()
+            for sid_key, entry in store.items():
+                if entry.get("stripe_customer_id") == cust:
+                    entry["paid"] = True
+                    entry["paid_until"] = (datetime.now(timezone.utc) + timedelta(days=33)).isoformat().replace("+00:00", "Z")
+            save_paid_sessions(store)
         sub = _find_by_customer(cust) if cust else None
         if sub:
             sub["paid"] = True
@@ -684,6 +841,7 @@ def stripe_webhook():
             changed = True
     elif etype in ("invoice.payment_failed", "customer.subscription.deleted"):
         cust = obj.get("customer")
+        mark_session_unpaid_by_customer(cust or "")
         sub = _find_by_customer(cust) if cust else None
         if sub:
             sub["paid"] = False
@@ -1175,6 +1333,13 @@ def api_location_ids():
 @app.route("/api/reserve", methods=["POST"])
 def api_reserve():
     """Create a 15-minute reservation hold on a found time slot."""
+    # Live-läge krävs: bokning bakom betalvägg.
+    if stripe_enabled() and not is_session_paid():
+        return jsonify({
+            "ok": False,
+            "error": "live_required",
+            "message": "Aktivera live-läge för att boka tider.",
+        }), 402
     data = request.json
     slot = data.get("slot", {})
 
