@@ -765,19 +765,32 @@ def billing_thanks():
     cs_id = request.args.get("cs", "")
     if _stripe and cs_id and cs_id != "{CHECKOUT_SESSION_ID}":
         try:
-            cs = _stripe.checkout.Session.retrieve(cs_id)
+            cs_obj = _stripe.checkout.Session.retrieve(cs_id)
+            # Convert StripeObject → plain dict for safe .get() access.
+            cs = dict(cs_obj) if cs_obj else {}
             ref = cs.get("client_reference_id") or ""
+            payment_status = cs.get("payment_status")
+            app.logger.info(
+                "billing/thanks: cs_id=%s ref=%s payment_status=%s",
+                cs_id, ref, payment_status,
+            )
             # payment_status is "paid" for normal purchases or "no_payment_required"
             # when a 100%-off coupon zeros the total. Both count as a successful checkout.
-            ok_status = cs.get("payment_status") in ("paid", "no_payment_required")
+            ok_status = payment_status in ("paid", "no_payment_required")
             if ref.startswith("sid:") and ok_status:
                 mark_session_paid(
                     ref[4:],
                     customer_id=cs.get("customer") or "",
                     subscription_id=cs.get("subscription") or "",
                 )
+                app.logger.info("billing/thanks: marked sid=%s as paid", ref[4:])
+            else:
+                app.logger.warning(
+                    "billing/thanks: not marking paid (ref=%s, status=%s)",
+                    ref, payment_status,
+                )
         except Exception as e:
-            app.logger.error("billing/thanks verify failed: %s", e)
+            app.logger.exception("billing/thanks verify failed: %r", e)
     return redirect("/app?billing=success")
 
 
