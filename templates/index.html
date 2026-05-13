@@ -373,6 +373,12 @@ var locDetails=[];
 var locTimeCounts={};
 var running=false,totalSearches=0,startTm=null,tmrI=null,activeRes=null;
 var authenticated=false;
+/* Most-recent slot detected by the scanner. Rendered as a big card so the user
+   can clearly see what was found, even in demo mode where /api/reserve is gated. */
+var foundSlot=null;
+/* When the user clicks Boka we keep the card around in a "booked" state so they
+   can cross-check the slot against the Trafikverket window we just opened. */
+var bookedSlot=null;
 
 function esc(s){if(!s)return'';var d=document.createElement('div');d.appendChild(document.createTextNode(String(s)));return d.innerHTML}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
@@ -717,6 +723,11 @@ async function startScanner(){
         var notifBody=addedTimes.length===1?slotDesc:addedTimes.length+' nya tider! Först: '+slotDesc;
         sendNotification('Ledig tid hittad!',notifBody,true);
         if(!activeRes){
+          /* Always show the big "Ledig tid hittad" card immediately, regardless
+             of demo/live state. createRes() will try to upgrade it to a real
+             15-min server-side reservation; in demo mode it returns 402 and the
+             card stays in "found" mode with an Aktivera-live button. */
+          foundSlot=best;bookedSlot=null;renderRes();
           await createRes(best);
           showT('Ledig tid hittad! '+slotDesc);
         }
@@ -743,12 +754,13 @@ function updUI(st){
 async function createRes(slot){
   var resp=await fetch('/api/reserve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot:slot})});
   if(resp.status===402){
-    var d=await resp.json().catch(function(){return{}});
-    if(confirm((d.message||'Aktivera live-läge för att boka tider.')+'\n\nVill du aktivera live nu?')){startCheckout()}
+    /* Demo mode: keep the found-slot card visible with an upgrade CTA instead
+       of a blocking confirm() dialog. */
+    foundSlot=slot;bookedSlot=null;activeRes=null;renderRes();
     return;
   }
   var r=await resp.json();
-  activeRes=r;renderRes();startResCd();
+  activeRes=r;foundSlot=null;bookedSlot=null;renderRes();startResCd();
 }
 function loadExistingRes(){fetch('/api/reservations').then(function(r){return r.json()}).then(function(l){if(l.length>0){activeRes=l[0];renderRes();startResCd()}})}
 var resI=null;
@@ -764,36 +776,71 @@ function startResCd(){
 
 function renderRes(){
   var a=document.getElementById('resArea');
-  if(!activeRes){a.innerHTML='';return}
-  var r=activeRes,sl=r.slot,left=Math.max(0,Math.floor((new Date(r.expires_at).getTime()-Date.now())/1e3)),exp=r.status==='expired'||left<=0;
+  /* Pick which slot to display, in priority order: an active server-side
+     reservation, a slot the user has already pressed Boka on (kept around so
+     they can cross-check the Trafikverket window), or the most-recently
+     scanner-found slot (demo mode). */
+  var mode=null,sl=null,exp=false,left=0;
+  if(activeRes){
+    mode='reserved';sl=activeRes.slot;
+    left=Math.max(0,Math.floor((new Date(activeRes.expires_at).getTime()-Date.now())/1e3));
+    exp=activeRes.status==='expired'||left<=0;
+    if(exp)mode='expired';
+  }else if(bookedSlot){
+    mode='booked';sl=bookedSlot;
+  }else if(foundSlot){
+    mode='found';sl=foundSlot;
+  }
+  if(!sl){a.innerHTML='';return}
   var dn=['söndag','måndag','tisdag','onsdag','torsdag','fredag','lördag'],mn=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
   var d=new Date(sl.date+'T12:00:00'),dl=dn[d.getDay()]+' '+d.getDate()+' '+mn[d.getMonth()]+' '+d.getFullYear();
   var m=String(Math.floor(left/60)).padStart(2,'0'),s=String(left%60).padStart(2,'0');
-  a.innerHTML='<div class="res-card'+(exp?' res-exp':'')+'">'
-    +'<div class="badge">'+(exp?'Reservationen har gått ut':'Tid reserverad!')+'</div>'
+  var badgeText,actsHtml,countdownHtml='';
+  if(mode==='reserved'){
+    badgeText='Tid reserverad!';
+    countdownHtml='<div class="cd">Gäller i <span class="t" id="resCd">'+m+':'+s+'</span></div>';
+    actsHtml='<button class="btn btn-bk" onclick="confirmBk()">Boka</button><button class="btn btn-dm" onclick="dismissRes()">Släng</button>';
+  }else if(mode==='expired'){
+    badgeText='Reservationen har gått ut';
+    actsHtml='<button class="btn btn-dm" onclick="dismissRes()">Stäng</button>';
+  }else if(mode==='booked'){
+    badgeText='Skickat till Trafikverket';
+    actsHtml='<button class="btn btn-bk" onclick="reopenBookingWindow()">Öppna igen</button><button class="btn btn-dm" onclick="closeBookedCard()">Stäng</button>';
+  }else{
+    /* mode==='found' */
+    badgeText='Ledig tid hittad!';
+    actsHtml='<button class="btn btn-bk" onclick="startCheckout()">Aktivera live för att boka</button><button class="btn btn-dm" onclick="dismissFoundCard()">Stäng</button>';
+  }
+  a.innerHTML='<div class="res-card'+(mode==='expired'?' res-exp':'')+'">'
+    +'<div class="badge">'+badgeText+'</div>'
     +'<div class="dt">'+esc(dl)+', '+esc(sl.time)+'</div>'
     +'<div class="loc">'+esc(sl.location)+'</div>'
-    +(exp?'':'<div class="cd">Gäller i <span class="t" id="resCd">'+m+':'+s+'</span></div>')
-    +'<div class="acts">'+(exp
-      ?'<button class="btn btn-dm" onclick="dismissRes()">Stäng</button>'
-      :'<button class="btn btn-bk" onclick="confirmBk()">Boka</button><button class="btn btn-dm" onclick="dismissRes()">Släng</button>')
-    +'</div>'+(sl.cost?'<div class="cost">Kostnad: '+esc(sl.cost)+'</div>':'')+'</div>';
+    +countdownHtml
+    +'<div class="acts">'+actsHtml+'</div>'
+    +(sl.cost?'<div class="cost">Kostnad: '+esc(sl.cost)+'</div>':'')+'</div>';
+}
+function dismissFoundCard(){foundSlot=null;renderRes()}
+function closeBookedCard(){bookedSlot=null;renderRes()}
+function reopenBookingWindow(){
+  if(!bookedSlot)return;
+  var url=buildBookingUrl(bookedSlot);
+  if(url)window.open(url,'_blank');
+}
+function buildBookingUrl(sl){
+  var lt=document.getElementById('licenceType').value||'B';
+  var lp=LICENCE_PARAMS[lt]||LICENCE_PARAMS['B'];
+  var et=document.getElementById('examType').value||'Körprov';
+  var eid=lp.eids[et]||12;
+  var locId=(sl&&sl.location_id)||0;
+  var vid=lp.vid||0;
+  return 'https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/'+locId+'/'+vid;
 }
 function confirmBk(){
   if(!activeRes)return;
   // IMPORTANT: window.open must run synchronously inside the click handler,
   // otherwise the popup blocker kills it (we lose the user-gesture after await).
-  var lt=document.getElementById('licenceType').value||'B';
-  var lp=LICENCE_PARAMS[lt]||LICENCE_PARAMS['B'];
-  var et=document.getElementById('examType').value||'Körprov';
-  var eid=lp.eids[et]||12;
-  // Trafikverket SPA route: /search/:ssn/:licenceId/:examTypeId/:locationId/:vehicleTypeId
-  // Passing the slot's locationId preselects the location so the slot is visible.
-  // SSN is accepted as plain (the SPA's parse() falls back to validate() for unscrambled values).
   var sl=activeRes.slot||{};
-  var locId=sl.location_id||0;
-  var vid=lp.vid||0;
-  var url='https://fp.trafikverket.se/Boka/#/search/'+encodeURIComponent(document.getElementById('ssn').value)+'/'+lp.lid+'/'+eid+'/'+locId+'/'+vid;
+  var url=buildBookingUrl(sl);
   // Copy the slot details to the clipboard so the user can paste / cross-check.
   var info=(sl.date||'')+' '+(sl.time||'')+' – '+(sl.location||'');
   try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(info)}catch(e){}
@@ -807,7 +854,9 @@ function confirmBk(){
   }
   var resId=activeRes.id;
   fetch('/api/reservation/'+resId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'booked'})}).catch(function(){});
-  activeRes=null;renderRes();if(resI)clearInterval(resI);
+  // Keep the slot visible so the user can compare it against the Trafikverket window.
+  bookedSlot=sl;activeRes=null;foundSlot=null;
+  renderRes();if(resI)clearInterval(resI);
 }
 async function dismissRes(){
   if(!activeRes)return;
