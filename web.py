@@ -766,8 +766,19 @@ def billing_thanks():
     if _stripe and cs_id and cs_id != "{CHECKOUT_SESSION_ID}":
         try:
             cs_obj = _stripe.checkout.Session.retrieve(cs_id)
-            # Convert StripeObject → plain dict for safe .get() access.
-            cs = dict(cs_obj) if cs_obj else {}
+            # Stripe SDK returns a StripeObject; dict(cs_obj) tries integer
+            # indexing and raises KeyError(0). Use to_dict() / to_dict_recursive().
+            if hasattr(cs_obj, "to_dict_recursive"):
+                cs = cs_obj.to_dict_recursive()
+            elif hasattr(cs_obj, "to_dict"):
+                cs = cs_obj.to_dict()
+            else:
+                cs = {
+                    "client_reference_id": getattr(cs_obj, "client_reference_id", None),
+                    "payment_status": getattr(cs_obj, "payment_status", None),
+                    "customer": getattr(cs_obj, "customer", None),
+                    "subscription": getattr(cs_obj, "subscription", None),
+                }
             ref = cs.get("client_reference_id") or ""
             payment_status = cs.get("payment_status")
             app.logger.info(
