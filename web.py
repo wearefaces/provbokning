@@ -21,7 +21,7 @@ from pathlib import Path
 
 import requests as http_requests
 from flask import (
-    Flask, abort, redirect, render_template, request, jsonify, session, url_for,
+    Flask, Response, abort, redirect, render_template, request, jsonify, session, url_for,
 )
 
 app = Flask(__name__)
@@ -99,7 +99,7 @@ def _require_login():
 def login():
     # If auth is disabled, just bounce to the app
     if not LOGIN_USER or not LOGIN_PASS:
-        return redirect(url_for("index"))
+        return redirect(url_for("admin"))
     error = None
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
@@ -108,10 +108,10 @@ def login():
             session.clear()
             session["user"] = LOGIN_USER
             session.permanent = True
-            nxt = request.args.get("next") or url_for("index")
+            nxt = request.args.get("next") or url_for("admin")
             # Only allow same-site relative redirects
             if not nxt.startswith("/") or nxt.startswith("//"):
-                nxt = url_for("index")
+                nxt = url_for("admin")
             return redirect(nxt)
         error = "Fel användarnamn eller lösenord"
     return render_template("login.html", error=error), (401 if error else 200)
@@ -508,8 +508,42 @@ def _fetch_location(ssn: str, exam_type_id: int, location_id: int,
 
 @app.route("/")
 def index():
+    return render_template("landing.html")
+
+
+@app.route("/app")
+def app_page():
     config = load_config()
     return render_template("index.html", config=config)
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /api/\n"
+        f"Sitemap: {request.url_root}sitemap.xml\n"
+    )
+    return Response(body, mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    base = request.url_root.rstrip("/")
+    urls = ["/", "/app", "/subscribe"]
+    items = "".join(
+        f"<url><loc>{base}{u}</loc><changefreq>weekly</changefreq>"
+        f"<priority>{'1.0' if u == '/' else '0.8'}</priority></url>"
+        for u in urls
+    )
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{items}</urlset>"
+    )
+    return Response(body, mimetype="application/xml")
 
 
 @app.route("/admin")
