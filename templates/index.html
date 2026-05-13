@@ -379,6 +379,8 @@ var foundSlot=null;
 /* When the user clicks Boka we keep the card around in a "booked" state so they
    can cross-check the slot against the Trafikverket window we just opened. */
 var bookedSlot=null;
+/* '' | 'checking' | 'ok' | 'gone' | 'error' — set by verifySlotInBackground() */
+var verifyState='';
 
 function esc(s){if(!s)return'';var d=document.createElement('div');d.appendChild(document.createTextNode(String(s)));return d.innerHTML}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
@@ -811,16 +813,30 @@ function renderRes(){
     badgeText='Ledig tid hittad!';
     actsHtml='<button class="btn btn-bk" onclick="startCheckout()">Aktivera live för att boka</button><button class="btn btn-dm" onclick="dismissFoundCard()">Stäng</button>';
   }
+  /* Live verification status against Trafikverket (set by verifySlotInBackground). */
+  var verifyHtml='';
+  if(mode==='booked'||mode==='reserved'){
+    if(verifyState==='checking'){
+      verifyHtml='<div style="font-size:.82rem;color:var(--text3);margin:8px 0 4px">Kontrollerar hos Trafikverket...</div>';
+    }else if(verifyState==='ok'){
+      verifyHtml='<div style="font-size:.82rem;color:var(--green);margin:8px 0 4px;font-weight:600">✓ Tiden finns kvar hos Trafikverket</div>';
+    }else if(verifyState==='gone'){
+      verifyHtml='<div style="font-size:.82rem;color:var(--red);margin:8px 0 4px;font-weight:600">✗ Tiden är inte längre ledig (någon hann boka). Vi söker vidare.</div>';
+    }else if(verifyState==='error'){
+      verifyHtml='<div style="font-size:.82rem;color:var(--text3);margin:8px 0 4px">Kunde inte verifiera mot Trafikverket.</div>';
+    }
+  }
   a.innerHTML='<div class="res-card'+(mode==='expired'?' res-exp':'')+'">'
     +'<div class="badge">'+badgeText+'</div>'
     +'<div class="dt">'+esc(dl)+', '+esc(sl.time)+'</div>'
     +'<div class="loc">'+esc(sl.location)+'</div>'
+    +verifyHtml
     +countdownHtml
     +'<div class="acts">'+actsHtml+'</div>'
     +(sl.cost?'<div class="cost">Kostnad: '+esc(sl.cost)+'</div>':'')+'</div>';
 }
-function dismissFoundCard(){foundSlot=null;renderRes()}
-function closeBookedCard(){bookedSlot=null;renderRes()}
+function dismissFoundCard(){foundSlot=null;verifyState='';renderRes()}
+function closeBookedCard(){bookedSlot=null;verifyState='';renderRes()}
 function reopenBookingWindow(){
   if(!bookedSlot)return;
   var url=buildBookingUrl(bookedSlot);
@@ -862,14 +878,19 @@ function confirmBk(){
   verifySlotInBackground(sl);
 }
 function verifySlotInBackground(sl){
+  verifyState='checking';renderRes();
   fetch('/api/verify_slot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot:sl})})
     .then(function(r){return r.json()})
     .then(function(d){
-      if(!d||!d.ok)return;
-      if(!d.still_available){
+      if(!d||!d.ok){verifyState='error';renderRes();return}
+      if(d.still_available){
+        verifyState='ok';renderRes();
+        showT('Tiden är fortfarande ledig hos Trafikverket. Klicka boka där.');
+      }else{
+        verifyState='gone';renderRes();
         showT('Obs: tiden är inte längre ledig hos Trafikverket. Någon hann boka den. Vi fortsätter söka.',true);
       }
-    }).catch(function(){});
+    }).catch(function(){verifyState='error';renderRes()});
 }
 async function dismissRes(){
   if(!activeRes)return;
