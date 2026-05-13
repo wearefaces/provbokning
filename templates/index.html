@@ -366,7 +366,7 @@ function updateNotifUI(){
     st.innerHTML='<span style="color:var(--green)">●</span> Aktiverat – du får notis när tid hittas';
     btn.textContent='Aktiverat';btn.disabled=true;
   }else if(notifPermission==='denied'){
-    st.innerHTML='<span style="color:var(--red)">●</span> Blockerat – tillåt notiser i webbläsarens inställningar';
+    st.innerHTML='<span style="color:var(--red)">●</span> Blockerat – klicka på <b>låset</b> i adressfältet → Notiser → <b>Tillåt</b>, ladda sedan om sidan';
     btn.textContent='Blockerat';btn.disabled=true;
   }else{
     st.textContent='Inte aktiverat ännu';
