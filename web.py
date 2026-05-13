@@ -767,7 +767,10 @@ def billing_thanks():
         try:
             cs = _stripe.checkout.Session.retrieve(cs_id)
             ref = cs.get("client_reference_id") or ""
-            if ref.startswith("sid:") and cs.get("payment_status") == "paid":
+            # payment_status is "paid" for normal purchases or "no_payment_required"
+            # when a 100%-off coupon zeros the total. Both count as a successful checkout.
+            ok_status = cs.get("payment_status") in ("paid", "no_payment_required")
+            if ref.startswith("sid:") and ok_status:
                 mark_session_paid(
                     ref[4:],
                     customer_id=cs.get("customer") or "",
