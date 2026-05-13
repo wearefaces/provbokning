@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin – Provbokningsbevakning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f9fb;--card:#fff;--card2:#f1f3f7;--border:#e2e5eb;
+  --accent:#4f46e5;--accent2:#6366f1;--accent-bg:rgba(79,70,229,.07);
+  --green:#16a34a;--red:#dc2626;--red-bg:rgba(220,38,38,.06);--red-border:rgba(220,38,38,.18);
+  --text:#1e293b;--text2:#475569;--text3:#94a3b8;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --radius:16px;--radius-sm:10px;
+}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.app{max-width:780px;margin:0 auto;padding:24px 20px 80px}
+.hdr{text-align:center;padding:24px 0 8px}
+.hdr h1{font-size:1.6rem;font-weight:700}
+.hdr p{color:var(--text3);font-size:.88rem;margin-top:4px}
+.hdr .meta{font-size:.78rem;color:var(--text3);margin-top:6px}
+.hdr .meta a{color:var(--accent);text-decoration:none;margin:0 6px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card h3{font-size:.82rem;color:var(--text3);font-weight:600;margin-bottom:14px;text-transform:uppercase;letter-spacing:.05em}
+.card-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px}
+@media(max-width:600px){.card-row{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:.75rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.field input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.9rem;font-family:inherit}
+.field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.btn{padding:8px 20px;border:0;border-radius:8px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-go{background:var(--accent);color:#fff}.btn-go:hover{background:var(--accent2)}
+.btn-sm{padding:6px 14px;font-size:.8rem}
+.btn-st{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.row label{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)}
+.row input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:14px 22px;border-radius:var(--radius-sm);font-weight:600;display:none;z-index:999;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+.toast.ok{border-left:4px solid var(--green)}.toast.err{border-left:4px solid var(--red)}
+p.hint{font-size:.76rem;color:var(--text3);margin-top:4px}
+p.hint a,code{color:var(--accent)}
+.sub-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--card)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hdr">
+    <h1>Admin</h1>
+    <p>Konfiguration av notifikationskanaler</p>
+    <div class="meta"><a href="/">Användarsida</a> · <a href="/logout">Logga ut</a></div>
+  </div>
+
+  <!-- 46elks SMS -->
+  <div class="card">
+    <h3>SMS (46elks)</h3>
+    <div class="card-row">
+      <div class="field"><label>46elks API username</label>
+        <input type="text" id="smsApiUser" value="{{ config.get('sms_api_username','') }}" autocomplete="off">
+      </div>
+      <div class="field"><label>46elks API password</label>
+        <input type="password" id="smsApiPass" value="{{ config.get('sms_api_password','') }}" autocomplete="off">
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="field"><label>Test-mottagare (E.164)</label>
+        <input type="tel" id="smsTestTo" placeholder="+46701234567">
+      </div>
+      <div class="field" style="justify-content:flex-end">
+        <button class="btn btn-go btn-sm" onclick="testSms()" style="align-self:flex-end">Skicka test-SMS</button>
+      </div>
+    </div>
+    <p class="hint">Skaffa API-uppgifter på <a href="https://46elks.se/" target="_blank">46elks.se</a>. Eller sätt miljövariabler <code>SMS_API_USERNAME</code> / <code>SMS_API_PASSWORD</code>.</p>
+  </div>
+
+  <!-- SMTP -->
+  <div class="card">
+    <h3>E-post (SMTP)</h3>
+    <div class="card-row">
+      <div class="field"><label>SMTP-server</label>
+        <input type="text" id="smtpHost" placeholder="smtp.gmail.com" value="{{ config.get('smtp_host','') }}" autocomplete="off">
+      </div>
+      <div class="field"><label>Port</label>
+        <input type="number" id="smtpPort" placeholder="587" value="{{ config.get('smtp_port',587) }}">
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="field"><label>SMTP-användare</label>
+        <input type="text" id="smtpUser" placeholder="user@gmail.com" value="{{ config.get('smtp_user','') }}" autocomplete="off">
+      </div>
+      <div class="field"><label>App-lösenord</label>
+        <input type="password" id="smtpPass" placeholder="••••••••" value="{{ config.get('smtp_pass','') }}" autocomplete="off">
+      </div>
+    </div>
+    <div class="card-row">
+      <div class="field"><label>Avsändaradress</label>
+        <input type="email" id="smtpFrom" placeholder="provbok@example.com" value="{{ config.get('smtp_from','') }}" autocomplete="off">
+      </div>
+      <div class="field" style="justify-content:flex-end">
+        <button class="btn btn-go btn-sm" onclick="testEmail()" style="align-self:flex-end">Skicka test-e-post</button>
+      </div>
+    </div>
+    <p class="hint">För Gmail: port 587 och ett <a href="https://myaccount.google.com/apppasswords" target="_blank">app-lösenord</a>. Du kan också köra <code>deploy/setup-smtp.sh</code> på servern.</p>
+  </div>
+
+  <!-- ntfy -->
+  <div class="card">
+    <h3>ntfy (Windows push)</h3>
+    <div class="row">
+      <label><input type="checkbox" id="ntfyEnabled" {{ 'checked' if config.get('ntfy_enabled') }}> ntfy-notiser aktiverade</label>
+    </div>
+    <div class="card-row">
+      <div class="field"><label>Topic</label>
+        <input type="text" id="ntfyTopic" placeholder="provbok-mittnamn-7g3h" value="{{ config.get('ntfy_topic','') }}">
+      </div>
+      <div class="field" style="justify-content:flex-end">
+        <button class="btn btn-go btn-sm" onclick="testNtfy()" style="align-self:flex-end">Skicka test-notis</button>
+      </div>
+    </div>
+    <p class="hint">Installera <a href="https://ntfy.sh/" target="_blank">ntfy</a> och prenumerera på samma topic.</p>
+  </div>
+
+  <!-- Save -->
+  <div class="card">
+    <button class="btn btn-go" onclick="saveAll()" style="width:100%;padding:12px">Spara alla inställningar</button>
+  </div>
+
+  <!-- Subscribers -->
+  <div class="card">
+    <h3>Prenumeranter <span id="subCount" style="color:var(--text3);font-weight:400"></span></h3>
+    <div id="subsList" style="font-size:.85rem;color:var(--text2)">Laddar…</div>
+    <p class="hint">Anmälningar kommer in via <a href="/subscribe" target="_blank">/subscribe</a>.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+function showT(m,err){var t=document.getElementById('toast');t.textContent=m;t.className='toast '+(err?'err':'ok');t.style.display='block';setTimeout(function(){t.style.display='none'},3500)}
+
+async function saveAll(){
+  var body={
+    sms_api_username:document.getElementById('smsApiUser').value,
+    sms_api_password:document.getElementById('smsApiPass').value,
+    smtp_host:document.getElementById('smtpHost').value,
+    smtp_port:document.getElementById('smtpPort').value,
+    smtp_user:document.getElementById('smtpUser').value,
+    smtp_pass:document.getElementById('smtpPass').value,
+    smtp_from:document.getElementById('smtpFrom').value,
+    ntfy_enabled:document.getElementById('ntfyEnabled').checked,
+    ntfy_topic:document.getElementById('ntfyTopic').value
+  };
+  try{
+    var r=await fetch('/save_admin_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(r.ok)showT('Sparat'); else showT('Kunde inte spara',true);
+  }catch(e){showT('Nätverksfel: '+e,true)}
+}
+
+async function testSms(){
+  await saveAll();
+  var to=document.getElementById('smsTestTo').value.trim();
+  if(!to){showT('Ange testmottagare',true);return}
+  try{
+    var r=await fetch('/api/sms/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:to})});
+    var d=await r.json();
+    if(d.ok)showT('Test-SMS skickat till '+to); else showT('SMS-fel: '+(d.error||'okänt'),true);
+  }catch(e){showT('Nätverksfel: '+e,true)}
+}
+
+async function testEmail(){
+  await saveAll();
+  var to=prompt('Skicka test-e-post till vilken adress?',document.getElementById('smtpFrom').value||'');
+  if(!to)return;
+  try{
+    var r=await fetch('/api/email/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:to})});
+    var d=await r.json();
+    if(d.ok)showT('Test-e-post skickad till '+to); else showT('E-postfel: '+(d.error||'okänt'),true);
+  }catch(e){showT('Nätverksfel: '+e,true)}
+}
+
+async function testNtfy(){
+  await saveAll();
+  var topic=document.getElementById('ntfyTopic').value.trim();
+  if(!topic){showT('Fyll i ett ntfy-topic',true);return}
+  try{
+    var r=await fetch('/api/ntfy/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:topic})});
+    var d=await r.json();
+    if(d.ok)showT('Test-notis skickad'); else showT('ntfy-fel: '+(d.error||'okänt'),true);
+  }catch(e){showT('Nätverksfel: '+e,true)}
+}
+
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+async function loadSubs(){
+  var el=document.getElementById('subsList');el.textContent='Laddar…';
+  try{
+    var r=await fetch('/api/subscribers');var subs=await r.json();
+    document.getElementById('subCount').textContent='('+subs.length+')';
+    if(!subs.length){el.innerHTML='<div style="color:var(--text3);font-style:italic">Inga prenumeranter än.</div>';return}
+    el.innerHTML=subs.map(function(s){
+      var contact=[s.phone,s.email].filter(Boolean).map(escapeHtml).join(' · ');
+      var status=s.active?'<span style="color:var(--green)">aktiv</span>':'<span style="color:var(--text3)">avregistrerad</span>';
+      var paid=s.paid?' · <span style="color:var(--green)">betald</span>':'';
+      return '<div class="sub-item"><div style="min-width:0;flex:1"><div style="font-weight:500;color:var(--text)">'+(escapeHtml(s.name)||'(utan namn)')+' — '+status+paid+'</div>'
+        +'<div style="font-size:.8rem;color:var(--text2);overflow:hidden;text-overflow:ellipsis">'+contact+'</div></div>'
+        +'<button onclick="delSub(\''+s.id+'\')" class="btn btn-sm btn-st">Ta bort</button></div>';
+    }).join('');
+  }catch(e){el.textContent='Kunde inte ladda: '+e}
+}
+async function delSub(id){
+  if(!confirm('Ta bort prenumeranten?'))return;
+  await fetch('/api/subscribers/'+id,{method:'DELETE'});
+  loadSubs();
+}
+loadSubs();
+</script>
+</body>
+</html>

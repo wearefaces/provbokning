@@ -63,20 +63,27 @@ SUBSCRIBERS_PATH = DATA_DIR / "subscribers.json"
 LOGIN_USER = os.environ.get("LOGIN_USER") or os.environ.get("BASIC_AUTH_USER", "")
 LOGIN_PASS = os.environ.get("LOGIN_PASS") or os.environ.get("BASIC_AUTH_PASS", "")
 
-# Endpoints that don't require login (the public subscribe page + login + APIs).
-_PUBLIC_ENDPOINTS = {
-    "login", "static",
-    "public_subscribe_page",
-    "api_subscribe", "api_unsubscribe",
-    "subscribe_thanks", "api_payment_config", "stripe_webhook",
+# Endpoints that REQUIRE admin login. Everything else is public.
+# BankID is the user-level auth for actually using the service; the
+# username/password login here only protects admin-only configuration.
+_ADMIN_ENDPOINTS = {
+    "admin", "save_admin_config",
+    "api_sms_test", "api_email_test", "api_ntfy_test",
+    "api_subscribers_list", "api_subscribers_delete",
 }
+
+
+def _is_admin() -> bool:
+    if not LOGIN_USER or not LOGIN_PASS:
+        return True  # auth disabled → effectively always admin
+    return session.get("user") == LOGIN_USER
 
 
 @app.before_request
 def _require_login():
     if not LOGIN_USER or not LOGIN_PASS:
         return None  # auth disabled
-    if request.endpoint in _PUBLIC_ENDPOINTS:
+    if request.endpoint not in _ADMIN_ENDPOINTS:
         return None
     if session.get("user") == LOGIN_USER:
         return None
@@ -500,14 +507,20 @@ def _fetch_location(ssn: str, exam_type_id: int, location_id: int,
 
 
 @app.route("/")
-def public_subscribe_page():
-    return render_template("subscribe.html")
-
-
-@app.route("/admin")
 def index():
     config = load_config()
     return render_template("index.html", config=config)
+
+
+@app.route("/admin")
+def admin():
+    config = load_config()
+    return render_template("admin.html", config=config)
+
+
+@app.route("/subscribe")
+def public_subscribe_page():
+    return render_template("subscribe.html")
 
 
 # ── Subscriber API (public) ──
@@ -685,7 +698,9 @@ def api_subscribers_delete(sub_id):
 
 @app.route("/save_config", methods=["POST"])
 def save_config_route():
-    data = request.json
+    """Public endpoint: only user-facing search/notification fields.
+    Admin-only credential fields are silently ignored unless caller is admin."""
+    data = request.json or {}
     config = load_config()
     config["swedish_ssn"] = data.get("swedish_ssn", "").strip()
     config["licence_type"] = data.get("licence_type", "B")
@@ -699,6 +714,36 @@ def save_config_route():
     config["date_to"] = data.get("date_to", "2026-12-31")
     config["sms_enabled"] = data.get("sms_enabled", False)
     config["sms_to"] = data.get("sms_to", "").strip()
+
+    # Admin-only keys: ignored unless logged in as admin
+    if _is_admin():
+        if "sms_api_username" in data:
+            config["sms_api_username"] = data.get("sms_api_username", "").strip()
+        if "sms_api_password" in data:
+            config["sms_api_password"] = data.get("sms_api_password", "").strip()
+        if "ntfy_enabled" in data:
+            config["ntfy_enabled"] = bool(data.get("ntfy_enabled"))
+        if "ntfy_topic" in data:
+            config["ntfy_topic"] = data.get("ntfy_topic", "").strip()
+        if "ntfy_server" in data:
+            config["ntfy_server"] = (data.get("ntfy_server") or "https://ntfy.sh").strip()
+        for k in ("smtp_host", "smtp_user", "smtp_pass", "smtp_from"):
+            if k in data:
+                config[k] = (data.get(k) or "").strip()
+        if "smtp_port" in data:
+            try:
+                config["smtp_port"] = int(data.get("smtp_port") or 587)
+            except (TypeError, ValueError):
+                config["smtp_port"] = 587
+    save_config_file(config)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/save_admin_config", methods=["POST"])
+def save_admin_config():
+    """Admin-only endpoint for credential / notification-channel fields."""
+    data = request.json or {}
+    config = load_config()
     if "sms_api_username" in data:
         config["sms_api_username"] = data.get("sms_api_username", "").strip()
     if "sms_api_password" in data:
@@ -1201,7 +1246,8 @@ def known_locations():
 def api_sms_test():
     """Send a test SMS to verify 46elks credentials."""
     config = load_config()
-    to = config.get("sms_to", "")
+    body = request.get_json(silent=True) or {}
+    to = (body.get("to") or "").strip() or config.get("sms_to", "")
     user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
     pwd = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
     if not to or not user or not pwd:
