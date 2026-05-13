@@ -54,27 +54,24 @@ button:disabled{opacity:.6;cursor:not-allowed}
     {% else %}
     <form id="form">
       <div class="field">
-        <label for="name">Namn (valfritt)</label>
-        <input id="name" type="text" autocomplete="name" placeholder="Anna Andersson">
+        <label for="phone">Telefonnummer</label>
+        <input id="phone" type="tel" autocomplete="tel" placeholder="070-123 45 67" inputmode="tel" required>
+        <div class="hint">Du får ett SMS när en ledig tid hittas.</div>
       </div>
       <div class="field">
-        <label for="phone">Telefonnummer för SMS</label>
-        <input id="phone" type="tel" autocomplete="tel" placeholder="070-123 45 67" inputmode="tel">
-        <div class="hint">Svenska nummer accepteras med eller utan landskod.</div>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;color:var(--text)">
+          <input type="checkbox" id="wantEmail" style="width:16px;height:16px;accent-color:var(--accent);margin:0">
+          Få även notis via e-post
+        </label>
       </div>
-      <div class="divider">eller</div>
-      <div class="field">
+      <div class="field" id="emailField" style="display:none">
         <label for="email">E-postadress</label>
         <input id="email" type="email" autocomplete="email" placeholder="du@example.com">
-        <div class="hint">Du kan ange båda om du vill ha notiser via båda kanaler.</div>
       </div>
       <button type="submit" id="submit">Anmäl mig</button>
       <div id="msg" class="msg"></div>
     </form>
     {% endif %}
-
-    <!-- placeholder to keep structure -->
-
     <div class="foot">Drivs av <strong>Provbokningsbevakning</strong></div>
   </div>
 </div>
@@ -97,6 +94,13 @@ const form = document.getElementById('form');
 const msg = document.getElementById('msg');
 const btn = document.getElementById('submit');
 
+const wantEmail = document.getElementById('wantEmail');
+const emailField = document.getElementById('emailField');
+if (wantEmail) wantEmail.addEventListener('change', () => {
+  emailField.style.display = wantEmail.checked ? '' : 'none';
+  if (!wantEmail.checked) document.getElementById('email').value = '';
+});
+
 if (form) form.addEventListener('submit', async (e) => {
   e.preventDefault();
   msg.className = 'msg';
@@ -108,9 +112,8 @@ if (form) form.addEventListener('submit', async (e) => {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        name:  document.getElementById('name').value,
         phone: document.getElementById('phone').value,
-        email: document.getElementById('email').value,
+        email: wantEmail && wantEmail.checked ? document.getElementById('email').value : '',
       }),
     });
     const data = await res.json();
