@@ -9,48 +9,50 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f8f9fb;--card:#fff;--card2:#f1f3f7;--border:#e2e5eb;
-  --accent:#4f46e5;--accent2:#6366f1;--accent-bg:rgba(79,70,229,.07);
-  --green:#16a34a;--red:#dc2626;--red-bg:rgba(220,38,38,.06);--red-border:rgba(220,38,38,.18);
-  --text:#1e293b;--text2:#475569;--text3:#94a3b8;
-  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
-  --radius:16px;--radius-sm:10px;
+  --bg:#eceef2;--card:#fff;--card2:#f4f5f8;--border:#e6e8ed;
+  --accent:#111827;--accent2:#1f2937;--accent-bg:rgba(17,24,39,.05);
+  --green:#16a34a;--red:#dc2626;--red-bg:#fdeaea;--red-border:rgba(220,38,38,.22);
+  --text:#0f172a;--text2:#475569;--text3:#94a3b8;
+  --shadow:0 1px 2px rgba(15,23,42,.04);
+  --radius:24px;--radius-sm:14px;
 }
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.app{max-width:780px;margin:0 auto;padding:24px 20px 80px}
-.hdr{text-align:center;padding:24px 0 8px}
-.hdr h1{font-size:1.6rem;font-weight:700}
-.hdr p{color:var(--text3);font-size:.88rem;margin-top:4px}
-.hdr .meta{font-size:.78rem;color:var(--text3);margin-top:6px}
-.hdr .meta a{color:var(--accent);text-decoration:none;margin:0 6px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin-bottom:16px;box-shadow:var(--shadow)}
-.card h3{font-size:.82rem;color:var(--text3);font-weight:600;margin-bottom:14px;text-transform:uppercase;letter-spacing:.05em}
+.app{max-width:780px;margin:0 auto;padding:28px 18px 100px}
+.hdr{text-align:center;padding:28px 0 10px}
+.hdr h1{font-size:1.8rem;font-weight:700;letter-spacing:-.03em}
+.hdr h1 .muted{color:var(--text3);font-weight:600}
+.hdr p{color:var(--text3);font-size:.9rem;margin-top:8px}
+.hdr .meta{font-size:.78rem;color:var(--text3);margin-top:10px}
+.hdr .meta a{color:var(--text2);text-decoration:none;margin:0 8px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card h3{font-size:.78rem;color:var(--text3);font-weight:700;margin-bottom:16px;text-transform:uppercase;letter-spacing:.08em}
 .card-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px}
 @media(max-width:600px){.card-row{grid-template-columns:1fr}}
 .field{display:flex;flex-direction:column;gap:5px}
-.field label{font-size:.75rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-.field input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.9rem;font-family:inherit}
+.field label{font-size:.74rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.field input{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:11px 14px;font-size:.92rem;font-family:inherit}
 .field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.btn{padding:8px 20px;border:0;border-radius:8px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit}
-.btn-go{background:var(--accent);color:#fff}.btn-go:hover{background:var(--accent2)}
-.btn-sm{padding:6px 14px;font-size:.8rem}
+.btn{padding:10px 22px;border:0;border-radius:999px;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-go{background:var(--accent);color:#fff}.btn-go:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 6px 14px rgba(17,24,39,.18)}
+.btn-sm{padding:7px 16px;font-size:.8rem}
 .btn-st{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
 .row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .row label{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)}
 .row input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
-.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:14px 22px;border-radius:var(--radius-sm);font-weight:600;display:none;z-index:999;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:14px 22px;border-radius:14px;font-weight:600;display:none;z-index:999;box-shadow:0 20px 60px rgba(15,23,42,.16)}
 .toast.ok{border-left:4px solid var(--green)}.toast.err{border-left:4px solid var(--red)}
-p.hint{font-size:.76rem;color:var(--text3);margin-top:4px}
-p.hint a,code{color:var(--accent)}
-.sub-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--card)}
+p.hint{font-size:.78rem;color:var(--text3);margin-top:6px}
+p.hint a,code{color:var(--text);background:var(--card2);padding:1px 6px;border-radius:6px;font-size:.85em}
+p.hint a{background:none;padding:0;text-decoration:underline}
+.sub-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;margin-bottom:6px;background:var(--card)}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="hdr">
-    <h1>Admin</h1>
-    <p>Konfiguration av notifikationskanaler</p>
-    <div class="meta"><a href="/">Användarsida</a> · <a href="/logout">Logga ut</a></div>
+    <h1>Admin <span class="muted">– konfiguration</span></h1>
+    <p>Hantera notifikationskanaler &amp; prenumeranter</p>
+    <div class="meta"><a href="/">← Användarsida</a> · <a href="/logout">Logga ut</a></div>
   </div>
 
   <!-- 46elks SMS -->

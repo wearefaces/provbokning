@@ -9,23 +9,23 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f8f9fb;
+  --bg:#eceef2;
   --card:#ffffff;
-  --border:#e2e5eb;
-  --accent:#4f46e5;
-  --accent2:#6366f1;
-  --accent-bg:rgba(79,70,229,.07);
+  --border:#e6e8ed;
+  --accent:#111827;
+  --accent2:#1f2937;
+  --accent-bg:rgba(17,24,39,.05);
   --red:#dc2626;
-  --red-bg:rgba(220,38,38,.06);
-  --red-border:rgba(220,38,38,.18);
-  --text:#1e293b;
+  --red-bg:#fdeaea;
+  --red-border:rgba(220,38,38,.22);
+  --text:#0f172a;
   --text3:#94a3b8;
-  --shadow-lg:0 10px 30px rgba(0,0,0,.08),0 2px 8px rgba(0,0,0,.04);
+  --shadow-lg:0 20px 60px rgba(15,23,42,.12);
 }
 html,body{height:100%}
 body{
   font-family:'Inter',system-ui,-apple-system,sans-serif;
-  background:linear-gradient(180deg,#f8f9fb 0%,#eef0f5 100%);
+  background:var(--bg);
   color:var(--text);
   display:flex;align-items:center;justify-content:center;
   min-height:100vh;padding:24px;-webkit-font-smoothing:antialiased;
@@ -33,34 +33,33 @@ body{
 .box{
   background:var(--card);
   border:1px solid var(--border);
-  border-radius:18px;
-  padding:36px 32px 28px;
-  width:100%;max-width:380px;
+  border-radius:24px;
+  padding:38px 34px 30px;
+  width:100%;max-width:400px;
   box-shadow:var(--shadow-lg);
 }
-.logo{
-  text-align:center;margin-bottom:24px;
-}
-.logo h1{font-size:1.4rem;font-weight:700;letter-spacing:-.02em}
-.logo p{color:var(--text3);font-size:.85rem;margin-top:4px}
+.logo{text-align:center;margin-bottom:26px}
+.logo h1{font-size:1.55rem;font-weight:700;letter-spacing:-.03em}
+.logo h1 .muted{color:var(--text3);font-weight:600}
+.logo p{color:var(--text3);font-size:.88rem;margin-top:6px}
 form{display:flex;flex-direction:column;gap:14px}
-.field{display:flex;flex-direction:column;gap:5px}
-.field label{font-size:.72rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:.74rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
 .field input{
-  background:var(--bg);border:1px solid var(--border);border-radius:10px;
-  padding:11px 13px;color:var(--text);font-size:.95rem;font-family:inherit;
+  background:var(--bg);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;color:var(--text);font-size:.95rem;font-family:inherit;
   transition:border-color .15s,box-shadow .15s;
 }
 .field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .btn{
-  margin-top:6px;padding:11px 20px;border:none;border-radius:10px;
+  margin-top:8px;padding:13px 22px;border:none;border-radius:999px;
   background:var(--accent);color:#fff;font-size:.95rem;font-weight:600;
-  cursor:pointer;font-family:inherit;transition:background .15s,box-shadow .15s;
+  cursor:pointer;font-family:inherit;transition:all .15s;
 }
-.btn:hover{background:var(--accent2);box-shadow:0 2px 8px rgba(79,70,229,.25)}
+.btn:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 8px 20px rgba(17,24,39,.18)}
 .err{
   background:var(--red-bg);border:1px solid var(--red-border);
-  color:var(--red);font-size:.85rem;padding:10px 12px;border-radius:8px;
+  color:var(--red);font-size:.86rem;padding:11px 13px;border-radius:12px;
   text-align:center;
 }
 </style>
@@ -68,7 +67,7 @@ form{display:flex;flex-direction:column;gap:14px}
 <body>
 <div class="box">
   <div class="logo">
-    <h1>Provbokningsbevakning</h1>
+    <h1>Provbokning<span class="muted">·sbevakning</span></h1>
     <p>Logga in för att fortsätta</p>
   </div>
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
