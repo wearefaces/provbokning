@@ -285,6 +285,18 @@ tr:hover td{background:var(--accent-bg)}
       </div>
     </div>
 
+    <!-- Browser notifications -->
+    <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:4px">Webbnotiser</div>
+          <div id="notifStatus" style="font-size:.78rem;color:var(--text3)">Kontrollerar…</div>
+        </div>
+        <button class="btn btn-go btn-sm" id="notifBtn" onclick="enableWebNotif()">Aktivera</button>
+      </div>
+      <p style="font-size:.76rem;color:var(--text3);margin-top:8px">Få en toast-notis i webbläsaren (även när fliken är minimerad) så fort en ledig tid hittas. Bara du själv ser notisen – inget skickas till servern.</p>
+    </div>
+
     <!-- Location Browser -->
     <h3>Välj orter <span style="font-weight:400;color:var(--text3);text-transform:none;font-size:.8rem">(lämna tomt = alla)</span></h3>
     <div class="loc-browser">
@@ -343,12 +355,38 @@ function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
 
 /* ── Notifications ── */
 var notifPermission='default';
-function requestNotifPermission(){
-  if(!('Notification' in window))return;
-  notifPermission=Notification.permission;
-  if(notifPermission==='default'){
-    Notification.requestPermission().then(function(p){notifPermission=p});
+function updateNotifUI(){
+  var st=document.getElementById('notifStatus'),btn=document.getElementById('notifBtn');
+  if(!st||!btn)return;
+  if(!('Notification' in window)){
+    st.textContent='Din webbläsare stödjer inte notiser';
+    btn.disabled=true;btn.textContent='Ej tillgänglig';return;
   }
+  if(notifPermission==='granted'){
+    st.innerHTML='<span style="color:var(--green)">●</span> Aktiverat – du får notis när tid hittas';
+    btn.textContent='Aktiverat';btn.disabled=true;
+  }else if(notifPermission==='denied'){
+    st.innerHTML='<span style="color:var(--red)">●</span> Blockerat – tillåt notiser i webbläsarens inställningar';
+    btn.textContent='Blockerat';btn.disabled=true;
+  }else{
+    st.textContent='Inte aktiverat ännu';
+    btn.textContent='Aktivera';btn.disabled=false;
+  }
+}
+function requestNotifPermission(){
+  if(!('Notification' in window)){updateNotifUI();return}
+  notifPermission=Notification.permission;
+  updateNotifUI();
+}
+function enableWebNotif(){
+  if(!('Notification' in window))return;
+  Notification.requestPermission().then(function(p){
+    notifPermission=p;
+    updateNotifUI();
+    if(p==='granted'){
+      try{new Notification('Webbnotiser aktiverade',{body:'Du får en notis så fort en ledig tid hittas.'})}catch(e){}
+    }
+  });
 }
 function sendNotification(title,body,urgent){
   // Browser notification (works when tab is background/minimized)
