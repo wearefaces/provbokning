@@ -1,0 +1,31 @@
+name: provbok
+description: Provbokningsbevakning – mobile client for körkortsprovsbevakning.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.2.2
+  # Cookie-aware HTTP client so the Flask session cookie that the backend
+  # uses for paid-session and BankID state survives between requests.
+  dio: ^5.7.0
+  dio_cookie_manager: ^3.1.1
+  cookie_jar: ^4.0.8
+  qr_flutter: ^4.1.0
+  url_launcher: ^6.3.0
+  shared_preferences: ^2.3.2
+  # Open the Stripe Checkout / Trafikverket booking URL in the device's
+  # in-app browser so the session cookie is shared back via app links if needed.
+  flutter_inappwebview: ^6.1.5
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
