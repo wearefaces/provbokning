@@ -21,7 +21,8 @@ from pathlib import Path
 
 import requests as http_requests
 from flask import (
-    Flask, Response, abort, redirect, render_template, request, jsonify, session, url_for,
+    Flask, Response, abort, redirect, render_template, request, jsonify,
+    send_from_directory, session, url_for,
 )
 try:
     from flask_cors import CORS  # type: ignore
@@ -607,6 +608,29 @@ def index():
 def app_page():
     config = load_config()
     return render_template("index.html", config=config)
+
+
+# ── Flutter mobile web app, served same-origin under /m/ ──
+MOBILE_WEB_DIR = PROJECT_DIR / "mobile" / "build" / "web"
+
+
+@app.route("/m/")
+@app.route("/m")
+def mobile_index():
+    if not (MOBILE_WEB_DIR / "index.html").exists():
+        abort(404)
+    return send_from_directory(MOBILE_WEB_DIR, "index.html")
+
+
+@app.route("/m/<path:filename>")
+def mobile_assets(filename):
+    if not MOBILE_WEB_DIR.exists():
+        abort(404)
+    full = (MOBILE_WEB_DIR / filename)
+    if not full.exists() or full.is_dir():
+        # Flutter SPA fallback
+        return send_from_directory(MOBILE_WEB_DIR, "index.html")
+    return send_from_directory(MOBILE_WEB_DIR, filename)
 
 
 @app.route("/robots.txt")

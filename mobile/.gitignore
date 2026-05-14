@@ -6,6 +6,10 @@
 .pub-cache/
 .pub/
 build/
+# Exception: ship the Flutter web release so the server can serve /m/
+!build/
+build/*
+!build/web/
 .idea/
 *.iml
 
