@@ -23,16 +23,32 @@ import requests as http_requests
 from flask import (
     Flask, Response, abort, redirect, render_template, request, jsonify, session, url_for,
 )
+try:
+    from flask_cors import CORS  # type: ignore
+except ImportError:  # pragma: no cover
+    CORS = None
 
 app = Flask(__name__)
 # Secret key for session cookies. Generate with: python -c "import secrets; print(secrets.token_hex(32))"
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
+_cookie_secure = os.environ.get("COOKIE_SECURE", "0") in ("1", "true", "True")
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    # Secure cookie when served over HTTPS (Fly.io sets X-Forwarded-Proto)
-    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "0") in ("1", "true", "True"),
+    # SameSite=None requires Secure; needed so the Flutter web/mobile client
+    # (different origin) can keep the Flask session cookie on /api/* calls.
+    SESSION_COOKIE_SAMESITE="None" if _cookie_secure else "Lax",
+    SESSION_COOKIE_SECURE=_cookie_secure,
 )
+
+# CORS for the mobile / web Flutter client. Allowed origins come from
+# CORS_ORIGINS env (comma-separated). Defaults cover the local dev server.
+_cors_origins = [o.strip() for o in os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5000"
+).split(",") if o.strip()]
+if CORS is not None:
+    CORS(app, resources={r"/api/*": {"origins": _cors_origins}},
+         supports_credentials=True)
 
 PROJECT_DIR = Path(__file__).parent
 # DATA_DIR can be overridden (e.g. mounted persistent volume on Fly.io).
