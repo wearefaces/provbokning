@@ -1584,6 +1584,21 @@ def api_email_test():
     return jsonify(result)
 
 
+@app.route("/api/config", methods=["GET"])
+def api_config_get():
+    """Return user-facing config fields (no admin secrets) for the mobile client."""
+    cfg = load_config()
+    public_keys = (
+        "swedish_ssn", "licence_type", "exam_type", "locations",
+        "date_from", "date_to", "sms_enabled", "sms_to",
+    )
+    out = {k: cfg.get(k, "" if k != "locations" else []) for k in public_keys}
+    out["sms_enabled"] = bool(out.get("sms_enabled"))
+    if not isinstance(out.get("locations"), list):
+        out["locations"] = []
+    return jsonify(out)
+
+
 @app.route("/api/location_details")
 def api_location_details():
     """Return all locations with name, id, and region."""

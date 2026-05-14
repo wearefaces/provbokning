@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'api.dart';
-import 'screens/home_screen.dart';
+import 'screens/shell.dart';
 import 'screens/login_screen.dart';
+import 'theme.dart';
+import 'widgets/glass.dart';
 
 void main() {
   runApp(const ProvbokApp());
@@ -15,10 +17,9 @@ class ProvbokApp extends StatelessWidget {
     return MaterialApp(
       title: 'Provbokning',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1F4FE0)),
-        useMaterial3: true,
-      ),
+      theme: buildGlassTheme(),
+      builder: (context, child) =>
+          GlassBackground(child: child ?? const SizedBox.shrink()),
       home: const _Bootstrap(),
     );
   }
@@ -42,7 +43,6 @@ class _BootstrapState extends State<_Bootstrap> {
 
   Future<void> _init() async {
     final api = await ApiClient.instance();
-    // Touch billing to ensure the session cookie is established server-side.
     try {
       await api.billingStatus();
     } catch (_) {/* offline tolerated */}
@@ -66,7 +66,12 @@ class _BootstrapState extends State<_Bootstrap> {
   Widget build(BuildContext context) {
     final api = _api;
     if (api == null || _authed == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(
+          child: CircularProgressIndicator(color: GlassPalette.accentSoft),
+        ),
+      );
     }
     if (_authed == false) {
       return LoginScreen(
@@ -74,7 +79,7 @@ class _BootstrapState extends State<_Bootstrap> {
         onAuthenticated: () => setState(() => _authed = true),
       );
     }
-    return HomeScreen(
+    return AppShell(
       api: api,
       onLogout: () => setState(() => _authed = false),
     );

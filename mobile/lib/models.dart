@@ -85,3 +85,109 @@ class ScanResult {
     );
   }
 }
+
+class AppConfigData {
+  final String swedishSsn;
+  final String licenceType; // B, A, A1, A2
+  final String examType; // Körprov, Kunskapsprov
+  final List<String> locations;
+  final String dateFrom;
+  final String dateTo;
+  final bool smsEnabled;
+  final String smsTo;
+
+  AppConfigData({
+    required this.swedishSsn,
+    required this.licenceType,
+    required this.examType,
+    required this.locations,
+    required this.dateFrom,
+    required this.dateTo,
+    required this.smsEnabled,
+    required this.smsTo,
+  });
+
+  factory AppConfigData.empty() => AppConfigData(
+        swedishSsn: '',
+        licenceType: 'B',
+        examType: 'Körprov',
+        locations: const [],
+        dateFrom: '',
+        dateTo: '',
+        smsEnabled: false,
+        smsTo: '',
+      );
+
+  factory AppConfigData.fromJson(Map<String, dynamic> j) => AppConfigData(
+        swedishSsn: (j['swedish_ssn'] ?? '').toString(),
+        licenceType: (j['licence_type'] ?? 'B').toString(),
+        examType: (j['exam_type'] ?? 'Körprov').toString(),
+        locations: (j['locations'] as List? ?? const [])
+            .map((e) => e.toString())
+            .toList(),
+        dateFrom: (j['date_from'] ?? '').toString(),
+        dateTo: (j['date_to'] ?? '').toString(),
+        smsEnabled: j['sms_enabled'] == true,
+        smsTo: (j['sms_to'] ?? '').toString(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'swedish_ssn': swedishSsn,
+        'licence_type': licenceType,
+        'exam_type': examType,
+        'locations': locations,
+        'date_from': dateFrom,
+        'date_to': dateTo,
+        'sms_enabled': smsEnabled,
+        'sms_to': smsTo,
+      };
+
+  AppConfigData copyWith({
+    String? swedishSsn,
+    String? licenceType,
+    String? examType,
+    List<String>? locations,
+    String? dateFrom,
+    String? dateTo,
+    bool? smsEnabled,
+    String? smsTo,
+  }) =>
+      AppConfigData(
+        swedishSsn: swedishSsn ?? this.swedishSsn,
+        licenceType: licenceType ?? this.licenceType,
+        examType: examType ?? this.examType,
+        locations: locations ?? this.locations,
+        dateFrom: dateFrom ?? this.dateFrom,
+        dateTo: dateTo ?? this.dateTo,
+        smsEnabled: smsEnabled ?? this.smsEnabled,
+        smsTo: smsTo ?? this.smsTo,
+      );
+}
+
+class LocationDetail {
+  final int id;
+  final String name;
+  final String region;
+
+  LocationDetail({required this.id, required this.name, required this.region});
+
+  factory LocationDetail.fromJson(Map<String, dynamic> j) => LocationDetail(
+        id: (j['id'] is int) ? j['id'] as int : int.tryParse('${j['id']}') ?? 0,
+        name: (j['name'] ?? '').toString(),
+        region: (j['region'] ?? '').toString(),
+      );
+}
+
+class ActivityEntry {
+  final String type;
+  final String time;
+  final Map<String, dynamic> raw;
+
+  ActivityEntry({required this.type, required this.time, required this.raw});
+
+  factory ActivityEntry.fromJson(Map<String, dynamic> j) => ActivityEntry(
+        type: (j['type'] ?? '').toString(),
+        time: (j['time'] ?? '').toString(),
+        raw: j,
+      );
+}

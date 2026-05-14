@@ -125,9 +125,65 @@ class ApiClient {
 
   // ── Config ───────────────────────────────────────────────────────────────
 
+  Future<AppConfigData> getConfig() async {
+    final r = await _dio.get('/api/config');
+    if (r.data is! Map) return AppConfigData.empty();
+    return AppConfigData.fromJson(r.data as Map<String, dynamic>);
+  }
+
   Future<void> saveConfig(Map<String, dynamic> cfg) async {
     await _dio.post('/save_config', data: cfg);
   }
+
+  // ── Locations ────────────────────────────────────────────────────────────
+
+  Future<List<LocationDetail>> locationDetails() async {
+    final r = await _dio.get('/api/location_details');
+    final list = (r.data as List? ?? const []);
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(LocationDetail.fromJson)
+        .toList();
+  }
+
+  // ── Activity log ─────────────────────────────────────────────────────────
+
+  Future<List<ActivityEntry>> activityLog() async {
+    final r = await _dio.get('/api/activity_log');
+    final list = (r.data as List? ?? const []);
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(ActivityEntry.fromJson)
+        .toList();
+  }
+
+  // ── Public subscribe (passive notifications) ─────────────────────────────
+
+  Future<bool> subscribe({String? phone, String? email, String? name}) async {
+    final r = await _dio.post('/api/subscribe', data: {
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (email != null && email.isNotEmpty) 'email': email,
+      if (name != null && name.isNotEmpty) 'name': name,
+    });
+    final d = r.data as Map<String, dynamic>? ?? {};
+    if (d['ok'] == true) {
+      final url = d['checkout_url']?.toString();
+      if (url != null && url.isNotEmpty) {
+        // Caller should open this URL externally.
+        throw CheckoutRedirect(url);
+      }
+      return true;
+    }
+    throw ApiException(d['error']?.toString() ?? 'subscribe_failed');
+  }
+}
+
+/// Signal that a Stripe Checkout URL should be opened externally by the caller.
+class CheckoutRedirect implements Exception {
+  final String url;
+  CheckoutRedirect(this.url);
+  @override
+  String toString() => 'CheckoutRedirect($url)';
 }
 
 class BankIdBegin {
