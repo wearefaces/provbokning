@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'config.dart';
 import 'models.dart';
+import 'api_platform_io.dart'
+    if (dart.library.html) 'api_platform_web.dart';
 
 /// Cookie-aware HTTP client targeting the Flask backend.
 ///
@@ -21,7 +21,6 @@ class ApiClient {
 
   static Future<ApiClient> instance() async {
     if (_instance != null) return _instance!;
-    final jar = CookieJar(); // in-memory for now; persist later if needed
     final dio = Dio(BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: const Duration(seconds: 15),
@@ -32,7 +31,7 @@ class ApiClient {
       // Don't throw on non-2xx; we inspect status codes (e.g. 402 for paywall).
       validateStatus: (_) => true,
     ));
-    dio.interceptors.add(CookieManager(jar));
+    configurePlatform(dio);
     _instance = ApiClient._(dio);
     return _instance!;
   }
