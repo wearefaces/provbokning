@@ -327,6 +327,19 @@ def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
     blocked by a corporate proxy. The relay must accept POST JSON
     `{to, message}` with `Authorization: Bearer <SMS_RELAY_TOKEN>`.
     """
+    # Normalise the recipient to E.164. 46elks requires a leading '+'.
+    # Common Swedish input forms: "0701234567", "46701234567", "+46701234567".
+    raw = (to or "").strip().replace(" ", "").replace("-", "")
+    if raw.startswith("00"):
+        to = "+" + raw[2:]
+    elif raw.startswith("+"):
+        to = raw
+    elif raw.startswith("0"):
+        to = "+46" + raw[1:]  # Swedish national → international
+    elif raw.isdigit():
+        to = "+" + raw
+    else:
+        to = raw
     relay_url = os.environ.get("SMS_RELAY_URL", "").strip()
     if relay_url:
         relay_token = os.environ.get("SMS_RELAY_TOKEN", "").strip()
