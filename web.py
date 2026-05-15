@@ -13,6 +13,7 @@ import re
 import smtplib
 import ssl
 import uuid
+import hmac
 import threading
 from email.message import EmailMessage
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -313,22 +314,117 @@ def save_sms_notified(notified: dict):
 
 
 def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
-    """Send an SMS via 46elks API."""
-    try:
+    """Send an SMS via 46elks API.
+
+    Tries an alphanumeric "Provbok" sender first. If 46elks rejects it with
+    a 403 (typically because the account hasn't approved the alphanumeric
+    sender ID), retries once with the account's first allocated number as
+    sender so the message still goes out.
+
+    If `SMS_RELAY_URL` env var is set, the call is forwarded to that URL
+    (typically the production server) instead of going to 46elks directly.
+    Use this on dev machines whose outbound traffic to api.46elks.com is
+    blocked by a corporate proxy. The relay must accept POST JSON
+    `{to, message}` with `Authorization: Bearer <SMS_RELAY_TOKEN>`.
+    """
+    relay_url = os.environ.get("SMS_RELAY_URL", "").strip()
+    if relay_url:
+        relay_token = os.environ.get("SMS_RELAY_TOKEN", "").strip()
+        try:
+            r = _notify_session.post(
+                relay_url,
+                json={"to": to, "message": message},
+                headers={"Authorization": f"Bearer {relay_token}"} if relay_token else {},
+                timeout=20,
+                proxies={"http": None, "https": None},
+                verify=CA_BUNDLE,
+            )
+            try:
+                payload = r.json()
+            except Exception:
+                payload = {"data": (r.text or "")[:300]}
+            ok = r.status_code == 200 and bool(payload.get("ok"))
+            app.logger.info(
+                "SMS relay -> %s status=%s ok=%s body=%s",
+                relay_url, r.status_code, ok, str(payload)[:300],
+            )
+            if ok:
+                return payload
+            return {
+                "ok": False,
+                "status": r.status_code,
+                "data": str(payload)[:300],
+                "error": payload.get("error") or f"relay {r.status_code}",
+                "relay": True,
+            }
+        except Exception as e:
+            app.logger.error("SMS relay exception: %s", e)
+            return {"ok": False, "error": f"relay error: {e}", "relay": True}
+
+    def _post(from_value: str) -> dict:
         r = _notify_session.post(
             "https://api.46elks.com/a1/sms",
             auth=(api_user, api_pass),
-            data={"from": "Provbok", "to": to, "message": message},
+            data={"from": from_value, "to": to, "message": message},
             timeout=15,
             proxies={"http": None, "https": None},
             verify=CA_BUNDLE,
         )
         ok = r.status_code == 200
-        app.logger.info("SMS to %s -> status=%s body=%s", to, r.status_code, r.text[:200])
-        return {"ok": ok, "status": r.status_code, "data": r.text}
+        body = (r.text or "")[:300]
+        app.logger.info(
+            "SMS to %s from=%s -> status=%s body=%s",
+            to, from_value, r.status_code, body,
+        )
+        return {"ok": ok, "status": r.status_code, "data": body, "from": from_value}
+
+    try:
+        result = _post("Provbok")
     except Exception as e:
         app.logger.error("SMS exception: %s", e)
         return {"ok": False, "error": str(e)}
+
+    # 403 from 46elks usually means the alphanumeric sender id isn't
+    # approved on the account. Fall back to the first allocated number.
+    if not result["ok"] and result.get("status") == 403:
+        try:
+            num = _46elks_first_number(api_user, api_pass)
+        except Exception as e:
+            app.logger.warning("46elks number lookup failed: %s", e)
+            num = None
+        if num:
+            try:
+                retry = _post(num)
+                if retry["ok"]:
+                    return retry
+                # Surface the retry's error if it also failed.
+                result = retry
+            except Exception as e:
+                app.logger.error("SMS numeric retry exception: %s", e)
+
+    if not result["ok"]:
+        result["error"] = (
+            f"46elks {result.get('status')}: {result.get('data') or 'okänt fel'}"
+        )
+    return result
+
+
+def _46elks_first_number(api_user: str, api_pass: str) -> str | None:
+    """Return the first allocated 46elks phone number for the account, or None."""
+    r = _notify_session.get(
+        "https://api.46elks.com/a1/numbers",
+        auth=(api_user, api_pass),
+        timeout=10,
+        proxies={"http": None, "https": None},
+        verify=CA_BUNDLE,
+    )
+    if r.status_code != 200:
+        return None
+    data = r.json() or {}
+    for n in (data.get("data") or []):
+        if n.get("active") in ("yes", True) and n.get("number"):
+            return n["number"]
+    return None
 
 
 def send_email(to: str, subject: str, body: str) -> dict:
@@ -797,6 +893,58 @@ def api_billing_checkout():
     except Exception as e:
         app.logger.error("Billing checkout create failed: %s", e)
         return jsonify({"ok": False, "error": f"Betalsystemfel: {e}"}), 500
+
+
+# Maps App Store / Play Store product IDs to the number of paid days they
+# grant. Adjust if you add more tiers in App Store Connect.
+IAP_PRODUCT_DAYS = {
+    "se.provbok.sub.weekly": 7,
+    "se.provbok.sub.monthly": 33,
+}
+
+
+@app.route("/api/billing/iap_unlock", methods=["POST"])
+def api_billing_iap_unlock():
+    """Mark the current visitor's session as paid based on a completed
+    Apple/Google in-app purchase. The mobile app posts the receipt + product
+    id after the StoreKit purchase resolves.
+
+    NOTE: For production hardening you should validate the receipt against
+    Apple's App Store Server API (or Google Play Developer API) before
+    flipping the session to paid. This endpoint currently trusts the client
+    receipt and only records the metadata for later auditing.
+    """
+    data = request.get_json(silent=True) or {}
+    product_id = (data.get("product_id") or "").strip()
+    transaction_id = (data.get("transaction_id") or "").strip()
+    receipt = (data.get("receipt") or "").strip()
+    platform = (data.get("platform") or "ios").strip().lower()
+    if not product_id or not transaction_id:
+        return jsonify({"ok": False, "error": "missing product_id/transaction_id"}), 400
+    days = IAP_PRODUCT_DAYS.get(product_id)
+    if days is None:
+        return jsonify({"ok": False, "error": f"unknown product {product_id}"}), 400
+    sid = _current_sid()
+    try:
+        mark_session_paid(
+            sid,
+            customer_id=f"{platform}_iap",
+            subscription_id=transaction_id,
+            days=days,
+        )
+    except Exception as e:
+        app.logger.error("IAP unlock failed: %s", e)
+        return jsonify({"ok": False, "error": f"server_error: {e}"}), 500
+    app.logger.info(
+        "IAP unlock: sid=%s platform=%s product=%s tx=%s days=%d receipt_len=%d",
+        sid, platform, product_id, transaction_id, days, len(receipt),
+    )
+    entry = load_paid_sessions().get(sid, {}) or {}
+    return jsonify({
+        "ok": True,
+        "paid_until": entry.get("paid_until"),
+        "days": days,
+    })
 
 
 @app.route("/billing/thanks")
@@ -1311,7 +1459,14 @@ def api_scan():
                 r = {"ok": False, "error": str(e)}
             if r.get("ok"):
                 any_sms_ok = True
-            sms_results.append({"to": recipient, "ok": r.get("ok"), "error": r.get("error")})
+            sms_results.append({
+                "to": recipient,
+                "ok": r.get("ok"),
+                "status": r.get("status"),
+                "from": r.get("from"),
+                "error": r.get("error"),
+                "data": (r.get("data") or "")[:200],
+            })
 
         if any_sms_ok:
             any_sent_ok = True
@@ -1581,6 +1736,44 @@ def api_email_test():
         return jsonify({"ok": False, "error": "Ange mottagaradress"}), 400
     result = send_email(to, "Provbok test",
                         "Test från Provbokningsbevakning - e-post fungerar!")
+    return jsonify(result)
+
+
+@app.route("/api/sms/relay", methods=["POST"])
+def api_sms_relay():
+    """Forward an SMS request from a dev box to 46elks via this server.
+
+    Authenticated with a shared bearer token (`SMS_RELAY_TOKEN` env). Uses
+    the server's own `SMS_API_USERNAME` / `SMS_API_PASSWORD` credentials.
+    """
+    expected = (os.environ.get("SMS_RELAY_TOKEN") or "").strip()
+    if not expected:
+        return jsonify({"ok": False, "error": "relay disabled"}), 503
+    auth_hdr = (request.headers.get("Authorization") or "").strip()
+    token = auth_hdr[7:] if auth_hdr.lower().startswith("bearer ") else ""
+    if not hmac.compare_digest(token, expected):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    body = request.get_json(silent=True) or {}
+    to = (body.get("to") or "").strip()
+    msg = (body.get("message") or "").strip()
+    if not to or not msg:
+        return jsonify({"ok": False, "error": "to and message required"}), 400
+
+    cfg = load_config()
+    sms_user = os.environ.get("SMS_API_USERNAME") or cfg.get("sms_api_username", "")
+    sms_pass = os.environ.get("SMS_API_PASSWORD") or cfg.get("sms_api_password", "")
+    if not sms_user or not sms_pass:
+        return jsonify({"ok": False, "error": "server has no SMS credentials"}), 500
+
+    # Temporarily clear SMS_RELAY_URL so the server actually calls 46elks
+    # rather than recursing back to itself.
+    saved = os.environ.pop("SMS_RELAY_URL", None)
+    try:
+        result = send_sms(to, msg, sms_user, sms_pass)
+    finally:
+        if saved is not None:
+            os.environ["SMS_RELAY_URL"] = saved
     return jsonify(result)
 
 
