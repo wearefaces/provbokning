@@ -713,6 +713,13 @@ def index():
     return render_template("landing.html")
 
 
+@app.route("/privacy")
+@app.route("/privacy/")
+def privacy():
+    from datetime import date
+    return render_template("privacy.html", updated=date.today().isoformat())
+
+
 @app.route("/app")
 def app_page():
     config = load_config()
