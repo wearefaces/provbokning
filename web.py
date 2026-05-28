@@ -1958,13 +1958,31 @@ def api_book_slot():
         return jsonify({"ok": False, "error": "trafikverket_invalid_response",
                         "status": rr.status_code}), 502
 
+    # TV's create-reservation returns HTTP 200 + envelope status 200 or 204
+    # on success (204 = "no body, operation completed"). Their own UI
+    # ignores the body entirely and re-fetches /get-active-reservations to
+    # confirm what was held. Mirror that: treat 200/204 as success and
+    # re-fetch active reservations to surface the real held state.
     envelope_status = result.get("status") if isinstance(result, dict) else None
-    if rr.status_code != 200 or (envelope_status is not None and envelope_status != 200):
+    if rr.status_code != 200 or (envelope_status not in (None, 200, 204)):
         app.logger.warning("create-reservation rejected: http=%s body=%s",
                             rr.status_code, str(result)[:400])
         return jsonify({"ok": False, "error": "create_reservation_failed",
                         "http_status": rr.status_code,
                         "tv_response": result}), 502
+
+    held = None
+    try:
+        ar = tv_session.post(TV_BASE + "/get-active-reservations",
+                             json={}, timeout=15)
+        ar_body = ar.json()
+        for r_ in (ar_body.get("data", {}) or {}).get("activeReservations", []) or []:
+            if (r_.get("startDate", "").startswith(date)
+                    and time in r_.get("startDate", "")):
+                held = r_
+                break
+    except Exception as e:
+        app.logger.warning("get-active-reservations post-claim probe failed: %s", e)
 
     log = load_activity_log()
     log.append({
@@ -1978,7 +1996,8 @@ def api_book_slot():
         "ok": True,
         "message": ("Tiden är reserverad i ditt namn på Trafikverket "
                     "(15 minuter). Slutför betalningen där."),
-        "reservation": result.get("data") if isinstance(result, dict) else result,
+        "held": held,
+        "tv_response": result,
     })
 
 
