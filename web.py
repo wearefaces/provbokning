@@ -6,6 +6,7 @@ Server-side scanning with BankID authentication.
 The server maintains an authenticated session with Trafikverket and
 scans for available driving test times.
 """
+from __future__ import annotations
 
 import json
 import os
@@ -374,22 +375,26 @@ def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
             app.logger.error("SMS relay exception: %s", e)
             return {"ok": False, "error": f"relay error: {e}", "relay": True}
 
-    def _post(from_value: str) -> dict:
+    def _post(from_value: str | None) -> dict:
+        data = {"to": to, "message": message}
+        if from_value:
+            data["from"] = from_value
         r = _notify_session.post(
             "https://api.46elks.com/a1/sms",
             auth=(api_user, api_pass),
-            data={"from": from_value, "to": to, "message": message},
+            data=data,
             timeout=15,
             proxies={"http": None, "https": None},
             verify=CA_BUNDLE,
         )
         ok = r.status_code == 200
         body = (r.text or "")[:300]
+        sender_label = from_value or "<default>"
         app.logger.info(
             "SMS to %s from=%s -> status=%s body=%s",
-            to, from_value, r.status_code, body,
+            to, sender_label, r.status_code, body,
         )
-        return {"ok": ok, "status": r.status_code, "data": body, "from": from_value}
+        return {"ok": ok, "status": r.status_code, "data": body, "from": sender_label}
 
     try:
         result = _post("Provbok")
@@ -414,6 +419,16 @@ def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
                 result = retry
             except Exception as e:
                 app.logger.error("SMS numeric retry exception: %s", e)
+
+    # Final fallback: omit explicit sender and let 46elks choose account default.
+    if not result["ok"] and result.get("status") == 403:
+        try:
+            retry_default = _post(None)
+            if retry_default["ok"]:
+                return retry_default
+            result = retry_default
+        except Exception as e:
+            app.logger.error("SMS default-sender retry exception: %s", e)
 
     if not result["ok"]:
         result["error"] = (
@@ -527,13 +542,7 @@ def _current_sid() -> str:
     return sid
 
 
-def is_session_paid() -> bool:
-    """Return True if current visitor has an active paid subscription."""
-    sid = session.get("sid")
-    if not sid:
-        return False
-    store = load_paid_sessions()
-    entry = store.get(sid)
+def _entry_is_active(entry: dict | None) -> bool:
     if not entry or not entry.get("paid"):
         return False
     pu = entry.get("paid_until")
@@ -547,18 +556,96 @@ def is_session_paid() -> bool:
     return True
 
 
+def is_session_paid() -> bool:
+    """Return True if current visitor has an active paid subscription.
+
+    Looks up by Flask session id first; falls back to any paid record
+    matching the email stored in this session (so a user that already paid
+    via the web/Stripe is auto-recognised on the mobile app after they
+    enter their email in Settings).
+    """
+    sid = session.get("sid")
+    if sid:
+        entry = load_paid_sessions().get(sid)
+        if _entry_is_active(entry):
+            return True
+    email = (session.get("email") or "").strip().lower()
+    if email:
+        _src_sid, src = _find_paid_entry_by_email(email)
+        if _entry_is_active(src):
+            # Auto-promote the current sid so subsequent calls are O(1).
+            if sid:
+                _link_session_to_email(sid, email)
+            return True
+    return False
+
+
 def mark_session_paid(sid: str, customer_id: str = "", subscription_id: str = "",
-                     days: int = 33):
+                     days: int = 33, email: str = "", source: str = ""):
     store = load_paid_sessions()
     until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat().replace("+00:00", "Z")
+    prev = store.get(sid, {}) or {}
     store[sid] = {
         "paid": True,
         "paid_until": until,
-        "stripe_customer_id": customer_id or store.get(sid, {}).get("stripe_customer_id", ""),
-        "stripe_subscription_id": subscription_id or store.get(sid, {}).get("stripe_subscription_id", ""),
+        "stripe_customer_id": customer_id or prev.get("stripe_customer_id", ""),
+        "stripe_subscription_id": subscription_id or prev.get("stripe_subscription_id", ""),
+        "email": (email or prev.get("email", "") or "").strip().lower(),
+        "source": source or prev.get("source", ""),
         "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     save_paid_sessions(store)
+
+
+def _find_paid_entry_by_email(email: str) -> tuple[str, dict] | tuple[None, None]:
+    """Return (sid, entry) of the most-recent paid record matching the given
+    email, or (None, None) if no match."""
+    if not email:
+        return None, None
+    needle = email.strip().lower()
+    if not needle:
+        return None, None
+    best_sid, best_entry, best_ts = None, None, ""
+    for sid, entry in load_paid_sessions().items():
+        if (entry.get("email") or "").strip().lower() != needle:
+            continue
+        if not entry.get("paid"):
+            continue
+        ts = entry.get("updated_at") or ""
+        if ts >= best_ts:
+            best_ts = ts
+            best_sid = sid
+            best_entry = entry
+    return best_sid, best_entry
+
+
+def _link_session_to_email(sid: str, email: str) -> bool:
+    """If another paid record exists for `email`, copy paid status onto the
+    current sid. Returns True if a link was applied."""
+    src_sid, src = _find_paid_entry_by_email(email)
+    if not src or src_sid == sid:
+        # Always at least stamp the email on the current sid so future lookups
+        # work, even if there's no existing paid record yet.
+        store = load_paid_sessions()
+        entry = store.get(sid, {}) or {}
+        entry["email"] = (email or "").strip().lower()
+        entry["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        store[sid] = entry
+        save_paid_sessions(store)
+        return False
+    store = load_paid_sessions()
+    store[sid] = {
+        "paid": True,
+        "paid_until": src.get("paid_until"),
+        "stripe_customer_id": src.get("stripe_customer_id", ""),
+        "stripe_subscription_id": src.get("stripe_subscription_id", ""),
+        "email": (email or "").strip().lower(),
+        "source": src.get("source", "") or "linked",
+        "linked_from_sid": src_sid,
+        "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    save_paid_sessions(store)
+    return True
 
 
 def mark_session_unpaid_by_customer(customer_id: str):
@@ -726,6 +813,23 @@ def app_page():
     return render_template("index.html", config=config)
 
 
+@app.route("/test/book")
+def test_book_page():
+    """Isolated test page for the new /api/book_slot endpoint.
+
+    Not linked from the main UI — only reachable by typing the URL.
+    Lists slots from the latest scan snapshot and lets the user attempt a
+    Trafikverket /create-reservation claim on any of them.
+    """
+    snapshot = load_snapshot()
+    snapshot = sorted(snapshot, key=lambda t: t.get("date", "") + t.get("time", ""))
+    return render_template(
+        "test_book.html",
+        slots=snapshot,
+        authenticated=auth_state["authenticated"],
+    )
+
+
 # ── Flutter mobile web app, served same-origin under /m/ ──
 MOBILE_WEB_DIR = PROJECT_DIR / "mobile" / "build" / "web"
 
@@ -878,13 +982,60 @@ def api_billing_status():
     """Returns whether the current visitor has live access or is in demo mode."""
     sid = _current_sid()
     paid = is_session_paid()
-    entry = load_paid_sessions().get(sid, {})
+    entry = load_paid_sessions().get(sid, {}) or {}
+    src = (entry.get("source") or "").lower()
     return jsonify({
         "paid": paid,
         "demo": not paid,
         "stripe_enabled": stripe_enabled(),
         "price_label": SUBSCRIPTION_PRICE_LABEL,
         "paid_until": entry.get("paid_until") if paid else None,
+        "source": src,
+        "email": (session.get("email") or entry.get("email") or "") if paid else "",
+    })
+
+
+# ── Profile (email + display name kept in the Flask session) ──
+
+@app.route("/api/profile", methods=["GET"])
+def api_profile_get():
+    _current_sid()
+    return jsonify({
+        "email": session.get("email", ""),
+        "name": session.get("name", ""),
+    })
+
+
+@app.route("/api/profile", methods=["POST"])
+def api_profile_post():
+    """Update the visitor's profile. If an email is supplied and another
+    paid record already exists with that email (e.g. the user paid via
+    Stripe on the web), copy the paid status onto this session."""
+    sid = _current_sid()
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    name = (data.get("name") or "").strip()
+    if email:
+        session["email"] = email
+    if "name" in data:
+        session["name"] = name
+    session.permanent = True
+    linked = False
+    if email:
+        try:
+            linked = _link_session_to_email(sid, email)
+        except Exception as e:
+            app.logger.exception("profile link failed: %r", e)
+    paid = is_session_paid()
+    entry = load_paid_sessions().get(sid, {}) or {}
+    return jsonify({
+        "ok": True,
+        "linked": linked,
+        "email": session.get("email", ""),
+        "name": session.get("name", ""),
+        "paid": paid,
+        "paid_until": entry.get("paid_until") if paid else None,
+        "source": (entry.get("source") or "").lower(),
     })
 
 
@@ -951,6 +1102,8 @@ def api_billing_iap_unlock():
             customer_id=f"{platform}_iap",
             subscription_id=transaction_id,
             days=days,
+            email=(session.get("email") or "").strip().lower(),
+            source=f"{platform}_iap",
         )
     except Exception as e:
         app.logger.error("IAP unlock failed: %s", e)
@@ -997,12 +1150,18 @@ def billing_thanks():
             # when a 100%-off coupon zeros the total. Both count as a successful checkout.
             ok_status = payment_status in ("paid", "no_payment_required")
             if ref.startswith("sid:") and ok_status:
+                cust_email = (cs.get("customer_email") or "").strip().lower()
+                if not cust_email:
+                    cd = cs.get("customer_details") or {}
+                    cust_email = (cd.get("email") or "").strip().lower()
                 mark_session_paid(
                     ref[4:],
                     customer_id=cs.get("customer") or "",
                     subscription_id=cs.get("subscription") or "",
+                    email=cust_email,
+                    source="stripe",
                 )
-                app.logger.info("billing/thanks: marked sid=%s as paid", ref[4:])
+                app.logger.info("billing/thanks: marked sid=%s as paid (email=%s)", ref[4:], cust_email or "-")
             else:
                 app.logger.warning(
                     "billing/thanks: not marking paid (ref=%s, status=%s)",
@@ -1044,10 +1203,16 @@ def stripe_webhook():
         ref = obj.get("client_reference_id") or ""
         # New flow: sid:<flask-session-id> — paid app access
         if ref.startswith("sid:"):
+            cust_email = (obj.get("customer_email") or "").strip().lower()
+            if not cust_email:
+                cd = obj.get("customer_details") or {}
+                cust_email = (cd.get("email") or "").strip().lower()
             mark_session_paid(
                 ref[4:],
                 customer_id=obj.get("customer") or "",
                 subscription_id=obj.get("subscription") or "",
+                email=cust_email,
+                source="stripe",
             )
             return jsonify({"ok": True})
         # Legacy flow: subscriber id (SMS/email notification list)
@@ -1688,6 +1853,135 @@ def api_verify_slot():
         "still_available": still_there,
         "checked_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "alternatives_count": len(fresh),
+    })
+
+
+def _build_booking_session(config: dict) -> tuple[dict, dict]:
+    ssn = config.get("swedish_ssn", "")
+    exam_type = config.get("exam_type", "Körprov")
+    licence_type = config.get("licence_type", "B")
+    lp = LICENCE_PARAMS.get(licence_type, LICENCE_PARAMS["B"])
+    exam_type_id = lp["exam_ids"].get(exam_type, EXAM_TYPE_IDS.get(exam_type, 12))
+    booking_session = {
+        "socialSecurityNumber": ssn,
+        "licenceId": lp["licence_id"],
+        "bookingModeId": 0,
+        "ignoreDebt": False,
+        "ignoreBookingHindrance": False,
+        "examinationTypeId": exam_type_id,
+        "excludeExaminationCategories": [],
+        "rescheduleTypeId": 0,
+        "paymentIsActive": False,
+        "paymentReference": None,
+        "paymentUrl": None,
+        "searchedMonths": 0,
+    }
+    return booking_session, lp
+
+
+@app.route("/api/book_slot", methods=["POST"])
+def api_book_slot():
+    """Claim a slot at Trafikverket via /create-reservation (15-min hold).
+
+    After this returns ok=True the slot is reserved in the user's name on
+    fp.trafikverket.se for 15 minutes; the user must complete payment there.
+    """
+    if not auth_state["authenticated"]:
+        return jsonify({"ok": False, "error": "Not authenticated"}), 401
+    if stripe_enabled() and not is_session_paid():
+        return jsonify({"ok": False, "error": "live_required",
+                        "message": "Aktivera live-läge för att boka."}), 402
+
+    data = request.get_json(silent=True) or {}
+    slot = data.get("slot") or {}
+    location_id = slot.get("location_id")
+    date = slot.get("date", "")
+    time = slot.get("time", "")
+    if not location_id or not date or not time:
+        return jsonify({"ok": False, "error": "missing slot fields"}), 400
+
+    config = load_config()
+    booking_session, lp = _build_booking_session(config)
+    occasion_bundle_query = {
+        "startDate": "1970-01-01T00:00:00.000Z",
+        "searchedMonths": 0,
+        "locationId": location_id,
+        "nearbyLocationIds": [],
+        "vehicleTypeId": lp["vehicle_type_id"],
+        "tachographTypeId": 1,
+        "occasionChoiceId": 1,
+        "examinationTypeId": booking_session["examinationTypeId"],
+    }
+
+    try:
+        r = tv_session.post(
+            TV_BASE + "/occasion-bundles",
+            json={"bookingSession": booking_session,
+                  "occasionBundleQuery": occasion_bundle_query},
+            timeout=15,
+        )
+        bundles_resp = r.json()
+    except Exception as e:
+        app.logger.error("book_slot occasion-bundles fetch failed: %s", e)
+        return jsonify({"ok": False, "error": "trafikverket_unreachable"}), 502
+
+    if bundles_resp.get("status") != 200:
+        return jsonify({"ok": False, "error": "lookup_failed",
+                        "data": bundles_resp.get("data")}), 502
+
+    target_bundle = None
+    for b in bundles_resp.get("data", {}).get("bundles", []):
+        for o in b.get("occasions", []):
+            if o.get("date") == date and o.get("time") == time:
+                target_bundle = b
+                break
+        if target_bundle:
+            break
+
+    if not target_bundle:
+        return jsonify({"ok": False, "error": "slot_gone",
+                        "message": "Tiden är inte längre tillgänglig."}), 409
+
+    try:
+        rr = tv_session.post(
+            TV_BASE + "/create-reservation",
+            json={"bookingSession": booking_session,
+                  "occasionBundle": target_bundle},
+            timeout=20,
+        )
+    except Exception as e:
+        app.logger.error("create-reservation request failed: %s", e)
+        return jsonify({"ok": False, "error": "trafikverket_unreachable"}), 502
+
+    try:
+        result = rr.json()
+    except Exception:
+        app.logger.error("create-reservation non-JSON response: status=%s body=%s",
+                          rr.status_code, (rr.text or "")[:300])
+        return jsonify({"ok": False, "error": "trafikverket_invalid_response",
+                        "status": rr.status_code}), 502
+
+    envelope_status = result.get("status") if isinstance(result, dict) else None
+    if rr.status_code != 200 or (envelope_status is not None and envelope_status != 200):
+        app.logger.warning("create-reservation rejected: http=%s body=%s",
+                            rr.status_code, str(result)[:400])
+        return jsonify({"ok": False, "error": "create_reservation_failed",
+                        "status": rr.status_code,
+                        "data": result.get("data") if isinstance(result, dict) else None}), 502
+
+    log = load_activity_log()
+    log.append({
+        "type": "booked_with_trafikverket",
+        "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "slot": slot,
+    })
+    save_activity_log(log)
+
+    return jsonify({
+        "ok": True,
+        "message": ("Tiden är reserverad i ditt namn på Trafikverket "
+                    "(15 minuter). Slutför betalningen där."),
+        "reservation": result.get("data") if isinstance(result, dict) else result,
     })
 
 

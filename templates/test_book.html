@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>Test: Boka via Trafikverket</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:780px;margin:24px auto;padding:0 16px;color:#1c1c1e;background:#f7f7f7}
+  h1{font-size:1.4rem;margin:0 0 4px}
+  .sub{color:#666;font-size:.9rem;margin-bottom:20px}
+  .warn{background:#fff3cd;border:1px solid #ffe69c;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:.9rem}
+  .row{background:#fff;border:1px solid #e5e5ea;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .meta{font-size:.92rem}
+  .meta b{font-weight:600}
+  .meta .loc{color:#555;font-size:.86rem;margin-top:2px}
+  button{background:#0a84ff;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:.92rem;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .empty{padding:24px;text-align:center;color:#888}
+  #log{background:#0c0c0c;color:#d4d4d4;font-family:ui-monospace,Menlo,monospace;font-size:.82rem;padding:12px 14px;border-radius:8px;margin-top:16px;white-space:pre-wrap;max-height:340px;overflow:auto}
+  .ok{color:#34c759}.bad{color:#ff453a}
+</style>
+</head>
+<body>
+<h1>Test: Boka via Trafikverket</h1>
+<div class="sub">POST /api/book_slot — claims a 15-min reservation against Trafikverket. Payment is still manual on fp.trafikverket.se.</div>
+
+{% if not authenticated %}
+<div class="warn"><b>Inte inloggad.</b> Logga in via <a href="/app">/app</a> med BankID först, kom sedan tillbaka hit.</div>
+{% endif %}
+
+{% if slots %}
+{% for s in slots %}
+<div class="row">
+  <div class="meta">
+    <b>{{ s.date }} {{ s.time }}</b>
+    <div class="loc">{{ s.location }}{% if s.cost %} — {{ s.cost }}{% endif %}{% if s.name %} — {{ s.name }}{% endif %}</div>
+  </div>
+  <button onclick='bookSlot({{ s | tojson }}, this)' {% if not authenticated %}disabled{% endif %}>Boka</button>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty">Inga tider i senaste snapshot. Kör en scan från /app först.</div>
+{% endif %}
+
+<div id="log" style="display:none"></div>
+
+<script>
+function log(msg, cls){
+  var el=document.getElementById('log');
+  el.style.display='block';
+  var line=document.createElement('div');
+  if(cls)line.className=cls;
+  line.textContent='['+new Date().toISOString().slice(11,19)+'] '+msg;
+  el.appendChild(line);
+  el.scrollTop=el.scrollHeight;
+}
+async function bookSlot(slot, btn){
+  btn.disabled=true;
+  log('-> POST /api/book_slot '+slot.date+' '+slot.time+' @ '+slot.location);
+  try{
+    var r=await fetch('/api/book_slot',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({slot:slot})
+    });
+    var j=null;
+    try{j=await r.json()}catch(e){j={parse_error:String(e)}}
+    log('<- HTTP '+r.status+' '+JSON.stringify(j,null,2), j&&j.ok?'ok':'bad');
+    if(j&&j.ok){
+      log('Tiden är reserverad hos Trafikverket (15 min). Slutför betalningen på fp.trafikverket.se.', 'ok');
+    }
+  }catch(e){
+    log('Fetch error: '+e, 'bad');
+  }finally{
+    btn.disabled=false;
+  }
+}
+</script>
+</body>
+</html>
