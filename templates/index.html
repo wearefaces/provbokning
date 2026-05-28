@@ -252,6 +252,9 @@ tr:hover td{background:var(--accent-bg)}
 <!-- Reservation -->
 <div id="resArea"></div>
 
+<!-- User's existing Trafikverket bookings/reservations -->
+<div id="bkArea"></div>
+
 <!-- Scan progress -->
 <div class="scanp" id="scanp">
   <div class="scanp-txt"><span id="scLbl">Skannar...</span><span id="scN">0/0</span></div>
@@ -454,7 +457,48 @@ function initSmsToggle(){
 }
 
 /* ── Init ── */
-(function(){loadLocDetails();loadExistingRes();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn()})();
+(function(){loadLocDetails();loadExistingRes();loadBookedExams();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn()})();
+
+/* ── Existing Trafikverket bookings ── */
+function loadBookedExams(){
+  fetch('/api/booked_examinations').then(function(r){return r.json()}).then(function(d){
+    if(!d||!d.ok)return;
+    renderBookedExams(d.confirmed||[],d.active_reservations||[]);
+  }).catch(function(){});
+}
+function renderBookedExams(confirmed,active){
+  var area=document.getElementById('bkArea');
+  if(!area)return;
+  if(!confirmed.length&&!active.length){area.innerHTML='';return}
+  var dn=['söndag','måndag','tisdag','onsdag','torsdag','fredag','lördag'];
+  var mn=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+  function fmt(sd){
+    // "2026-06-04 09:05" → "tor 4 jun 2026, 09:05"
+    if(!sd)return '';
+    var m=/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}:\d{2})/.exec(sd);
+    if(!m)return sd;
+    var d=new Date(+m[1],+m[2]-1,+m[3]);
+    return dn[d.getDay()].slice(0,3)+' '+(+m[3])+' '+mn[+m[2]-1]+' '+m[1]+', '+m[4];
+  }
+  function row(e,isHeld){
+    var name=(e.examinationName||'').trim();
+    var loc=e.locationName||('plats #'+(e.locationId||'?'));
+    var when=fmt(e.startDate);
+    var badge=isHeld
+      ?'<span style="background:var(--yellow-bg,#fef3c7);color:#92400e;padding:3px 10px;border-radius:999px;font-size:.74rem;font-weight:700;border:1px solid #fde68a">Reserverad (obetald)</span>'
+      :'<span style="background:var(--green-bg);color:var(--green);padding:3px 10px;border-radius:999px;font-size:.74rem;font-weight:700;border:1px solid var(--green-border)">Bekräftad</span>';
+    return '<div style="padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;background:var(--card)">'
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+badge
+      +'<span style="font-weight:600">'+esc(name||'Prov')+'</span></div>'
+      +'<div style="font-size:1.05rem;font-weight:700;margin-top:6px">'+esc(when)+'</div>'
+      +'<div style="font-size:.9rem;color:var(--text2)">'+esc(loc)+'</div>'
+      +'</div>';
+  }
+  var html='<div style="margin:14px 0 6px;font-weight:700;font-size:.95rem">Dina bokningar hos Trafikverket</div>';
+  active.forEach(function(e){html+=row(e,true)});
+  confirmed.forEach(function(e){html+=row(e,false)});
+  area.innerHTML=html;
+}
 
 /* ── Billing (demo → live) ── */
 var billingPaid=false;

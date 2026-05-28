@@ -2035,6 +2035,62 @@ def api_book_diagnose():
     })
 
 
+def _location_name_map() -> dict[int, str]:
+    if not LOCATION_DETAILS_PATH.exists():
+        return {}
+    try:
+        with open(LOCATION_DETAILS_PATH, "r") as f:
+            return {loc["id"]: loc.get("name", "")
+                    for loc in json.load(f).get("locations", [])}
+    except Exception:
+        return {}
+
+
+@app.route("/api/booked_examinations")
+def api_booked_examinations():
+    """Return the user's confirmed (paid) exams and active (held) reservations
+    from Trafikverket, with location names resolved."""
+    if not auth_state["authenticated"]:
+        return jsonify({"ok": False, "error": "Not authenticated"}), 401
+
+    config = load_config()
+    _, lp = _build_booking_session(config)
+    names = _location_name_map()
+
+    def _decorate(entry: dict) -> dict:
+        e = dict(entry)
+        lid = e.get("locationId")
+        if lid and lid in names:
+            e["locationName"] = names[lid]
+        return e
+
+    confirmed: list[dict] = []
+    active: list[dict] = []
+    try:
+        r = tv_session.post(TV_BASE + "/get-confirmed-examinations",
+                            json={"licenceId": lp["licence_id"]}, timeout=15)
+        body = r.json()
+        if isinstance(body.get("data"), list):
+            confirmed = [_decorate(x) for x in body["data"]]
+    except Exception as e:
+        app.logger.warning("get-confirmed-examinations failed: %s", e)
+
+    try:
+        r = tv_session.post(TV_BASE + "/get-active-reservations",
+                            json={}, timeout=15)
+        body = r.json()
+        ar = (body.get("data") or {}).get("activeReservations") or []
+        active = [_decorate(x) for x in ar]
+    except Exception as e:
+        app.logger.warning("get-active-reservations failed: %s", e)
+
+    return jsonify({
+        "ok": True,
+        "confirmed": confirmed,
+        "active_reservations": active,
+    })
+
+
 @app.route("/api/reservations")
 def api_reservations():
     """Return active reservations (not expired/dismissed)."""
