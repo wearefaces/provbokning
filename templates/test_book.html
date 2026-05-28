@@ -28,6 +28,12 @@
 <div class="warn"><b>Inte inloggad.</b> Logga in via <a href="/app">/app</a> med BankID först, kom sedan tillbaka hit.</div>
 {% endif %}
 
+<div style="margin-bottom:12px">
+  <button onclick="diagnose(this)" {% if not authenticated %}disabled{% endif %}
+          style="background:#444">Diagnose TV state</button>
+  <span style="font-size:.85rem;color:#666;margin-left:8px">Visar dina aktiva reservationer, bekräftade prov och booking-hindrances hos Trafikverket.</span>
+</div>
+
 {% if slots %}
 {% for s in slots %}
 <div class="row">
@@ -53,6 +59,16 @@ function log(msg, cls){
   line.textContent='['+new Date().toISOString().slice(11,19)+'] '+msg;
   el.appendChild(line);
   el.scrollTop=el.scrollHeight;
+}
+async function diagnose(btn){
+  btn.disabled=true;
+  log('-> POST /api/book_diagnose');
+  try{
+    var r=await fetch('/api/book_diagnose',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    var j=null;try{j=await r.json()}catch(e){j={parse_error:String(e)}}
+    log('<- HTTP '+r.status+' '+JSON.stringify(j,null,2), j&&j.ok?'ok':'bad');
+  }catch(e){log('Fetch error: '+e,'bad')}
+  finally{btn.disabled=false}
 }
 async function bookSlot(slot, btn){
   btn.disabled=true;

@@ -1966,8 +1966,8 @@ def api_book_slot():
         app.logger.warning("create-reservation rejected: http=%s body=%s",
                             rr.status_code, str(result)[:400])
         return jsonify({"ok": False, "error": "create_reservation_failed",
-                        "status": rr.status_code,
-                        "data": result.get("data") if isinstance(result, dict) else None}), 502
+                        "http_status": rr.status_code,
+                        "tv_response": result}), 502
 
     log = load_activity_log()
     log.append({
@@ -1982,6 +1982,40 @@ def api_book_slot():
         "message": ("Tiden är reserverad i ditt namn på Trafikverket "
                     "(15 minuter). Slutför betalningen där."),
         "reservation": result.get("data") if isinstance(result, dict) else result,
+    })
+
+
+@app.route("/api/book_diagnose", methods=["POST"])
+def api_book_diagnose():
+    """Probe Trafikverket for the user's current state so we can see what
+    is blocking /create-reservation. Calls get-active-reservations,
+    get-confirmed-examinations, and booking-hindrances and returns each
+    raw response verbatim."""
+    if not auth_state["authenticated"]:
+        return jsonify({"ok": False, "error": "Not authenticated"}), 401
+
+    config = load_config()
+    booking_session, lp = _build_booking_session(config)
+
+    def _post(slug: str, payload: dict) -> dict:
+        try:
+            r = tv_session.post(TV_BASE + "/" + slug, json=payload, timeout=15)
+            try:
+                body = r.json()
+            except Exception:
+                body = {"_non_json": (r.text or "")[:400]}
+            return {"http_status": r.status_code, "body": body}
+        except Exception as e:
+            return {"error": str(e)}
+
+    return jsonify({
+        "ok": True,
+        "active_reservations": _post("get-active-reservations", {}),
+        "confirmed_examinations": _post("get-confirmed-examinations",
+                                        {"licenceId": lp["licence_id"]}),
+        "booking_hindrances": _post("booking-hindrances",
+                                    {"bookingSession": booking_session}),
+        "booking_session_used": booking_session,
     })
 
 
