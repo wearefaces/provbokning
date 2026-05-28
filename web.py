@@ -1888,9 +1888,6 @@ def api_book_slot():
     """
     if not auth_state["authenticated"]:
         return jsonify({"ok": False, "error": "Not authenticated"}), 401
-    if stripe_enabled() and not is_session_paid():
-        return jsonify({"ok": False, "error": "live_required",
-                        "message": "Aktivera live-läge för att boka."}), 402
 
     data = request.get_json(silent=True) or {}
     slot = data.get("slot") or {}
