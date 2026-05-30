@@ -420,15 +420,22 @@ def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
             except Exception as e:
                 app.logger.error("SMS numeric retry exception: %s", e)
 
-    # Final fallback: omit explicit sender and let 46elks choose account default.
+    # Trial accounts on 46elks only allow sending from the verified owner
+    # mobile number. Try that explicitly as the next fallback.
     if not result["ok"] and result.get("status") == 403:
         try:
-            retry_default = _post(None)
-            if retry_default["ok"]:
-                return retry_default
-            result = retry_default
+            owner = _46elks_owner_mobile(api_user, api_pass)
         except Exception as e:
-            app.logger.error("SMS default-sender retry exception: %s", e)
+            app.logger.warning("46elks owner mobile lookup failed: %s", e)
+            owner = None
+        if owner:
+            try:
+                retry_owner = _post(owner)
+                if retry_owner["ok"]:
+                    return retry_owner
+                result = retry_owner
+            except Exception as e:
+                app.logger.error("SMS owner-mobile retry exception: %s", e)
 
     if not result["ok"]:
         result["error"] = (
@@ -438,7 +445,8 @@ def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
 
 
 def _46elks_first_number(api_user: str, api_pass: str) -> str | None:
-    """Return the first allocated 46elks phone number for the account, or None."""
+    """Return the first SMS-capable 46elks number for the account, or None.
+    Skips websocket/voice-only numbers (trial accounts often only have those)."""
     r = _notify_session.get(
         "https://api.46elks.com/a1/numbers",
         auth=(api_user, api_pass),
@@ -450,9 +458,29 @@ def _46elks_first_number(api_user: str, api_pass: str) -> str | None:
         return None
     data = r.json() or {}
     for n in (data.get("data") or []):
-        if n.get("active") in ("yes", True) and n.get("number"):
+        if n.get("active") not in ("yes", True) or not n.get("number"):
+            continue
+        caps = n.get("capabilities") or []
+        if "sms" in caps or n.get("category") == "sms":
             return n["number"]
     return None
+
+
+def _46elks_owner_mobile(api_user: str, api_pass: str) -> str | None:
+    """Return the verified owner mobile (E.164) for the 46elks account.
+    On trial accounts this is the only sender 46elks accepts for SMS."""
+    r = _notify_session.get(
+        "https://api.46elks.com/a1/me",
+        auth=(api_user, api_pass),
+        timeout=10,
+        proxies={"http": None, "https": None},
+        verify=CA_BUNDLE,
+    )
+    if r.status_code != 200:
+        return None
+    data = r.json() or {}
+    mob = (data.get("mobilenumber") or "").strip()
+    return mob or None
 
 
 def send_email(to: str, subject: str, body: str) -> dict:
