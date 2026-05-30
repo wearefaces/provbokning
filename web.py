@@ -2118,6 +2118,42 @@ def known_locations():
     return jsonify(names)
 
 
+@app.route("/api/sms/diagnose", methods=["GET", "POST"])
+def api_sms_diagnose():
+    """Probe 46elks to see what numbers and sender IDs the account has
+    available. Useful when sends keep failing with 403."""
+    config = load_config()
+    user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
+    pwd = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
+    if not user or not pwd:
+        return jsonify({"ok": False, "error": "Saknar 46elks-uppgifter"})
+
+    def _get(path: str) -> dict:
+        try:
+            r = _notify_session.get(
+                "https://api.46elks.com" + path,
+                auth=(user, pwd),
+                timeout=10,
+                proxies={"http": None, "https": None},
+                verify=CA_BUNDLE,
+            )
+            try:
+                body = r.json()
+            except Exception:
+                body = {"_non_json": (r.text or "")[:300]}
+            return {"http_status": r.status_code, "body": body}
+        except Exception as e:
+            return {"error": str(e)}
+
+    return jsonify({
+        "ok": True,
+        "configured_to": config.get("sms_to", ""),
+        "numbers": _get("/a1/numbers"),
+        "senderids": _get("/a1/senderids"),
+        "subaccount": _get("/a1/me"),
+    })
+
+
 @app.route("/api/sms/test", methods=["POST"])
 def api_sms_test():
     """Send a test SMS to verify 46elks credentials."""
