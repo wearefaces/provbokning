@@ -1756,9 +1756,12 @@ def api_scan():
         })
         save_activity_log(log)
 
-    # ── Auto-claim earliest new slot at Trafikverket (policy: skip if hold exists) ──
+    # ── Auto-claim earliest newly-added slot at Trafikverket (skip if hold exists) ──
+    # Gate on `added` (per-snapshot diff), NOT `to_notify` — the SMS dedup
+    # would otherwise suppress claims for slots that disappear (someone else
+    # holds) and reappear (their hold expired) after a previous SMS.
     auto_claim_result = None
-    if to_notify and config.get("auto_reserve_enabled") and auth_state["authenticated"]:
+    if added and config.get("auto_reserve_enabled") and auth_state["authenticated"]:
         existing = _tv_active_reservations()
         if existing:
             app.logger.info("auto_reserve: skipped, %d existing hold(s)", len(existing))
@@ -1772,7 +1775,7 @@ def api_scan():
             save_activity_log(log)
             auto_claim_result = {"skipped": "existing_hold", "existing": existing}
         else:
-            earliest = sorted(to_notify, key=lambda t: t.get("date", "") + t.get("time", ""))[0]
+            earliest = sorted(added, key=lambda t: t.get("date", "") + t.get("time", ""))[0]
             body, status = _claim_slot_at_tv(earliest, config)
             app.logger.info("auto_reserve: claim %s %s @ %s -> http=%s ok=%s",
                              earliest.get("date"), earliest.get("time"),
