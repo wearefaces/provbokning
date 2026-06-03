@@ -124,6 +124,15 @@ p.hint a{background:none;padding:0;text-decoration:underline}
     <p class="hint">Installera <a href="https://ntfy.sh/" target="_blank">ntfy</a> och prenumerera på samma topic.</p>
   </div>
 
+  <!-- Auto-reserve -->
+  <div class="card">
+    <h3>Automatisk reservation</h3>
+    <div class="row">
+      <label><input type="checkbox" id="autoReserveEnabled" {{ 'checked' if config.get('auto_reserve_enabled') }}> Reservera automatiskt vid ny ledig tid</label>
+    </div>
+    <p class="hint">När en ny tid hittas reserverar servern den direkt hos Trafikverket (15-minutershold), så ingen hinner före. Om du redan har en hold hoppar vi över för att inte skriva över den.</p>
+  </div>
+
   <!-- Save -->
   <div class="card">
     <button class="btn btn-go" onclick="saveAll()" style="width:100%;padding:12px">Spara alla inställningar</button>
@@ -151,7 +160,8 @@ async function saveAll(){
     smtp_pass:document.getElementById('smtpPass').value,
     smtp_from:document.getElementById('smtpFrom').value,
     ntfy_enabled:document.getElementById('ntfyEnabled').checked,
-    ntfy_topic:document.getElementById('ntfyTopic').value
+    ntfy_topic:document.getElementById('ntfyTopic').value,
+    auto_reserve_enabled:document.getElementById('autoReserveEnabled').checked
   };
   try{
     var r=await fetch('/save_admin_config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

@@ -1370,6 +1370,8 @@ def save_admin_config():
         config["sms_api_password"] = data.get("sms_api_password", "").strip()
     if "ntfy_enabled" in data:
         config["ntfy_enabled"] = bool(data.get("ntfy_enabled"))
+    if "auto_reserve_enabled" in data:
+        config["auto_reserve_enabled"] = bool(data.get("auto_reserve_enabled"))
     if "ntfy_topic" in data:
         config["ntfy_topic"] = data.get("ntfy_topic", "").strip()
     if "ntfy_server" in data:
@@ -1754,7 +1756,40 @@ def api_scan():
         })
         save_activity_log(log)
 
-    return jsonify({"ok": True, "times": collected, "added": added, "removed": removed})
+    # ── Auto-claim earliest new slot at Trafikverket (policy: skip if hold exists) ──
+    auto_claim_result = None
+    if to_notify and config.get("auto_reserve_enabled") and auth_state["authenticated"]:
+        existing = _tv_active_reservations()
+        if existing:
+            app.logger.info("auto_reserve: skipped, %d existing hold(s)", len(existing))
+            log = load_activity_log()
+            log.append({
+                "type": "auto_reserve_skipped",
+                "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "reason": "existing_hold",
+                "existing_count": len(existing),
+            })
+            save_activity_log(log)
+            auto_claim_result = {"skipped": "existing_hold", "existing": existing}
+        else:
+            earliest = sorted(to_notify, key=lambda t: t.get("date", "") + t.get("time", ""))[0]
+            body, status = _claim_slot_at_tv(earliest, config)
+            app.logger.info("auto_reserve: claim %s %s @ %s -> http=%s ok=%s",
+                             earliest.get("date"), earliest.get("time"),
+                             earliest.get("location"), status, body.get("ok"))
+            log = load_activity_log()
+            log.append({
+                "type": "auto_reserve_claimed" if body.get("ok") else "auto_reserve_failed",
+                "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "slot": earliest,
+                "result": {"ok": body.get("ok"), "error": body.get("error"),
+                           "held": body.get("held")},
+            })
+            save_activity_log(log)
+            auto_claim_result = {"slot": earliest, "result": body, "http_status": status}
+
+    return jsonify({"ok": True, "times": collected, "added": added,
+                    "removed": removed, "auto_claim": auto_claim_result})
 
 
 @app.route("/api/location_ids")
@@ -1907,25 +1942,29 @@ def _build_booking_session(config: dict) -> tuple[dict, dict]:
     return booking_session, lp
 
 
-@app.route("/api/book_slot", methods=["POST"])
-def api_book_slot():
-    """Claim a slot at Trafikverket via /create-reservation (15-min hold).
+def _tv_active_reservations() -> list[dict]:
+    """Return the user's currently-held reservations at Trafikverket, or []."""
+    try:
+        r = tv_session.post(TV_BASE + "/get-active-reservations",
+                            json={}, timeout=15)
+        body = r.json()
+        return (body.get("data") or {}).get("activeReservations") or []
+    except Exception as e:
+        app.logger.warning("get-active-reservations failed: %s", e)
+        return []
 
-    After this returns ok=True the slot is reserved in the user's name on
-    fp.trafikverket.se for 15 minutes; the user must complete payment there.
-    """
-    if not auth_state["authenticated"]:
-        return jsonify({"ok": False, "error": "Not authenticated"}), 401
 
-    data = request.get_json(silent=True) or {}
-    slot = data.get("slot") or {}
+def _claim_slot_at_tv(slot: dict, config: dict) -> tuple[dict, int]:
+    """Reverse-engineered Trafikverket /create-reservation claim.
+
+    Returns (response_dict, http_status). On success the slot is held in
+    the user's TV account for 15 minutes."""
     location_id = slot.get("location_id")
     date = slot.get("date", "")
     time = slot.get("time", "")
     if not location_id or not date or not time:
-        return jsonify({"ok": False, "error": "missing slot fields"}), 400
+        return {"ok": False, "error": "missing slot fields"}, 400
 
-    config = load_config()
     booking_session, lp = _build_booking_session(config)
     occasion_bundle_query = {
         "startDate": "1970-01-01T00:00:00.000Z",
@@ -1948,11 +1987,11 @@ def api_book_slot():
         bundles_resp = r.json()
     except Exception as e:
         app.logger.error("book_slot occasion-bundles fetch failed: %s", e)
-        return jsonify({"ok": False, "error": "trafikverket_unreachable"}), 502
+        return {"ok": False, "error": "trafikverket_unreachable"}, 502
 
     if bundles_resp.get("status") != 200:
-        return jsonify({"ok": False, "error": "lookup_failed",
-                        "data": bundles_resp.get("data")}), 502
+        return {"ok": False, "error": "lookup_failed",
+                "data": bundles_resp.get("data")}, 502
 
     target_bundle = None
     for b in bundles_resp.get("data", {}).get("bundles", []):
@@ -1964,8 +2003,8 @@ def api_book_slot():
             break
 
     if not target_bundle:
-        return jsonify({"ok": False, "error": "slot_gone",
-                        "message": "Tiden är inte längre tillgänglig."}), 409
+        return {"ok": False, "error": "slot_gone",
+                "message": "Tiden är inte längre tillgänglig."}, 409
 
     try:
         rr = tv_session.post(
@@ -1976,41 +2015,33 @@ def api_book_slot():
         )
     except Exception as e:
         app.logger.error("create-reservation request failed: %s", e)
-        return jsonify({"ok": False, "error": "trafikverket_unreachable"}), 502
+        return {"ok": False, "error": "trafikverket_unreachable"}, 502
 
     try:
         result = rr.json()
     except Exception:
         app.logger.error("create-reservation non-JSON response: status=%s body=%s",
                           rr.status_code, (rr.text or "")[:300])
-        return jsonify({"ok": False, "error": "trafikverket_invalid_response",
-                        "status": rr.status_code}), 502
+        return {"ok": False, "error": "trafikverket_invalid_response",
+                "status": rr.status_code}, 502
 
     # TV's create-reservation returns HTTP 200 + envelope status 200 or 204
     # on success (204 = "no body, operation completed"). Their own UI
-    # ignores the body entirely and re-fetches /get-active-reservations to
-    # confirm what was held. Mirror that: treat 200/204 as success and
-    # re-fetch active reservations to surface the real held state.
+    # ignores the body and re-fetches /get-active-reservations to confirm.
     envelope_status = result.get("status") if isinstance(result, dict) else None
     if rr.status_code != 200 or (envelope_status not in (None, 200, 204)):
         app.logger.warning("create-reservation rejected: http=%s body=%s",
                             rr.status_code, str(result)[:400])
-        return jsonify({"ok": False, "error": "create_reservation_failed",
-                        "http_status": rr.status_code,
-                        "tv_response": result}), 502
+        return {"ok": False, "error": "create_reservation_failed",
+                "http_status": rr.status_code,
+                "tv_response": result}, 502
 
     held = None
-    try:
-        ar = tv_session.post(TV_BASE + "/get-active-reservations",
-                             json={}, timeout=15)
-        ar_body = ar.json()
-        for r_ in (ar_body.get("data", {}) or {}).get("activeReservations", []) or []:
-            if (r_.get("startDate", "").startswith(date)
-                    and time in r_.get("startDate", "")):
-                held = r_
-                break
-    except Exception as e:
-        app.logger.warning("get-active-reservations post-claim probe failed: %s", e)
+    for r_ in _tv_active_reservations():
+        if (r_.get("startDate", "").startswith(date)
+                and time in r_.get("startDate", "")):
+            held = r_
+            break
 
     log = load_activity_log()
     log.append({
@@ -2020,13 +2051,22 @@ def api_book_slot():
     })
     save_activity_log(log)
 
-    return jsonify({
-        "ok": True,
-        "message": ("Tiden är reserverad i ditt namn på Trafikverket "
-                    "(15 minuter). Slutför betalningen där."),
-        "held": held,
-        "tv_response": result,
-    })
+    return {"ok": True,
+            "message": ("Tiden är reserverad i ditt namn på Trafikverket "
+                        "(15 minuter). Slutför betalningen där."),
+            "held": held,
+            "tv_response": result}, 200
+
+
+@app.route("/api/book_slot", methods=["POST"])
+def api_book_slot():
+    """Claim a slot at Trafikverket via /create-reservation (15-min hold)."""
+    if not auth_state["authenticated"]:
+        return jsonify({"ok": False, "error": "Not authenticated"}), 401
+    data = request.get_json(silent=True) or {}
+    slot = data.get("slot") or {}
+    body, status = _claim_slot_at_tv(slot, load_config())
+    return jsonify(body), status
 
 
 @app.route("/api/book_diagnose", methods=["POST"])
