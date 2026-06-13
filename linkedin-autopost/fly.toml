@@ -1,0 +1,24 @@
+# Fly.io deployment. Run `fly launch --no-deploy` to create the app, set secrets
+# (fly secrets set ANTHROPIC_API_KEY=… LINKEDIN_CLIENT_ID=… …), create a volume
+# (fly volumes create data --size 1), then `fly deploy`.
+app = "linkedin-autopost"
+primary_region = "arn"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "3000"
+  DB_PATH = "/app/data/app.sqlite"
+  # Set BASE_URL to your real https URL as a secret or here once known.
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false   # keep running so the scheduler fires
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[mounts]]
+  source = "data"
+  destination = "/app/data"
