@@ -219,24 +219,73 @@ LICENCE_PARAMS = {
     "A2": {"licence_id": 24, "vehicle_type_id": 1, "exam_ids": {"Körprov": 10, "Kunskapsprov": 2}},
 }
 
-# ── Trafikverket session state (single user) ──
-tv_session = http_requests.Session()
-tv_session.headers.update({
+# ── Trafikverket session state (per browser / Flask session) ──
+# Each browser gets its OWN authenticated Trafikverket session and auth flags,
+# keyed by the stable Flask session id (_current_sid). This is what keeps one
+# user's BankID login — and the bookings behind it — from ever being visible to
+# another user who hits the server while someone else happens to be logged in.
+_TV_HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
     "X-Requested-With": "XMLHttpRequest",
     "Content-Type": "application/json; charset=utf-8",
     "Origin": "https://fp.trafikverket.se",
     "Referer": "https://fp.trafikverket.se/Boka/ng",
-})
-auth_state = {"referenceId": None, "qrStartToken": None, "qrStartTime": None,
-              "qrStartSecret": None, "authenticated": False}
-auth_lock = threading.Lock()
+}
+
+# Idle per-browser Trafikverket contexts are evicted after this many hours so
+# the in-memory store can't grow without bound on a long-running server.
+TV_SESSION_TTL_HOURS = 12
+
+_tv_store: dict[str, dict] = {}
+_tv_store_lock = threading.Lock()
 
 
-def _init_tv_session():
+def _new_tv_session() -> "http_requests.Session":
+    s = http_requests.Session()
+    s.headers.update(_TV_HEADERS)
+    return s
+
+
+def _new_auth_state() -> dict:
+    return {"referenceId": None, "qrStartToken": None, "qrStartTime": None,
+            "qrStartSecret": None, "authenticated": False}
+
+
+def _prune_tv_store(now: datetime) -> None:
+    """Drop contexts idle longer than the TTL. Caller must hold _tv_store_lock."""
+    cutoff = now - timedelta(hours=TV_SESSION_TTL_HOURS)
+    for sid in [k for k, v in _tv_store.items() if v.get("seen", now) < cutoff]:
+        _tv_store.pop(sid, None)
+
+
+def _tv_ctx() -> dict:
+    """Return the current browser's Trafikverket context — its own requests
+    session, auth flags, and auth lock — creating it on first use. Keyed by the
+    per-browser Flask session id so users never share Trafikverket state."""
+    sid = _current_sid()
+    now = datetime.now(timezone.utc)
+    with _tv_store_lock:
+        ctx = _tv_store.get(sid)
+        if ctx is None:
+            _prune_tv_store(now)
+            ctx = {"session": _new_tv_session(),
+                   "auth": _new_auth_state(),
+                   "lock": threading.Lock()}
+            _tv_store[sid] = ctx
+        ctx["seen"] = now
+        return ctx
+
+
+def _tv() -> tuple["http_requests.Session", dict]:
+    """(session, auth) for the current browser — see _tv_ctx()."""
+    ctx = _tv_ctx()
+    return ctx["session"], ctx["auth"]
+
+
+def _init_tv_session(sess: "http_requests.Session"):
     """Hit the ng page to get session cookies (required for CSRF)."""
     try:
-        tv_session.get(TV_BASE + "/ng", timeout=12)
+        sess.get(TV_BASE + "/ng", timeout=12)
     except Exception:
         pass
 
@@ -769,9 +818,10 @@ def send_ntfy(topic: str, title: str, message: str, server: str = "https://ntfy.
         return {"ok": False, "error": str(e)}
 
 
-def _fetch_location(ssn: str, exam_type_id: int, location_id: int,
-                    licence_id: int = 5, vehicle_type_id: int = 2) -> list[dict]:
-    """Fetch available times for a single location using the authenticated session."""
+def _fetch_location(sess: "http_requests.Session", ssn: str, exam_type_id: int,
+                    location_id: int, licence_id: int = 5,
+                    vehicle_type_id: int = 2) -> list[dict]:
+    """Fetch available times for a single location using the given session."""
     payload = {
         "bookingSession": {
             "socialSecurityNumber": ssn,
@@ -799,7 +849,7 @@ def _fetch_location(ssn: str, exam_type_id: int, location_id: int,
         },
     }
     try:
-        r = tv_session.post(TV_BASE + "/occasion-bundles", json=payload, timeout=15)
+        r = sess.post(TV_BASE + "/occasion-bundles", json=payload, timeout=15)
         data = r.json()
         if data.get("status") == 200 and data.get("data", {}).get("bundles"):
             results = []
@@ -851,6 +901,7 @@ def test_book_page():
     """
     snapshot = load_snapshot()
     snapshot = sorted(snapshot, key=lambda t: t.get("date", "") + t.get("time", ""))
+    _, auth_state = _tv()
     return render_template(
         "test_book.html",
         slots=snapshot,
@@ -1391,9 +1442,61 @@ def save_admin_config():
 # ── BankID Authentication ──
 
 
+def _is_demo_reviewer() -> bool:
+    """True when the current Flask session is an App Store review session
+    (logged in via demo code, not BankID). Per-session, so it never touches
+    any Trafikverket auth state."""
+    return bool(session.get("demo_reviewer"))
+
+
+def _demo_slots() -> list[dict]:
+    """Static sample test slots for App Store review — no Trafikverket access,
+    no real bookings. Dates are relative to today so they always look current."""
+    today = datetime.now(timezone.utc).date()
+    samples = [
+        (3, "09:15", "Stockholm City", 1000132),
+        (5, "13:45", "Järfälla", 1000005),
+        (9, "10:30", "Uppsala", 1000009),
+        (14, "15:00", "Stockholm City", 1000132),
+    ]
+    out = []
+    for days, hhmm, location, lid in samples:
+        d = (today + timedelta(days=days)).isoformat()
+        out.append({
+            "date": d,
+            "time": hhmm,
+            "location": location,
+            "location_id": lid,
+            "name": "Körprov B",
+            "cost": "1250 kr",
+            "occasion_id": f"demo-{lid}-{d}-{hhmm}",
+        })
+    return out
+
+
+@app.route("/api/auth/demo_login", methods=["POST"])
+def auth_demo_login():
+    """App Store review login. A reviewer enters the demo code configured in
+    App Store Connect to explore the app with sample data — no BankID, no
+    Trafikverket access, no real bookings. Enabled only when REVIEW_DEMO_CODE
+    is set in the environment."""
+    expected = os.environ.get("REVIEW_DEMO_CODE", "").strip()
+    data = request.get_json(silent=True) or {}
+    code = (data.get("code") or "").strip()
+    if not expected or not code or not hmac.compare_digest(code, expected):
+        return jsonify({"ok": False, "error": "invalid_code"}), 401
+    _current_sid()
+    session["demo_reviewer"] = True
+    session.permanent = True
+    return jsonify({"ok": True})
+
+
 @app.route("/api/auth/check")
 def auth_check():
     """Check if the Trafikverket session is authenticated."""
+    if _is_demo_reviewer():
+        return jsonify({"authenticated": True})
+    tv_session, auth_state = _tv()
     if auth_state["authenticated"]:
         # Verify with Trafikverket that session is still valid
         try:
@@ -1412,8 +1515,10 @@ def auth_check():
 @app.route("/api/auth/begin", methods=["POST"])
 def auth_begin():
     """Start BankID authentication. Returns QR code data."""
-    with auth_lock:
-        _init_tv_session()
+    ctx = _tv_ctx()
+    tv_session, auth_state = ctx["session"], ctx["auth"]
+    with ctx["lock"]:
+        _init_tv_session(tv_session)
         try:
             r = tv_session.post(TV_BASE + "/begin-authentication", json=None, timeout=15)
             data = r.json()
@@ -1434,7 +1539,9 @@ def auth_begin():
 @app.route("/api/auth/status", methods=["POST"])
 def auth_status():
     """Poll BankID authentication status. Returns updated QR code."""
-    with auth_lock:
+    ctx = _tv_ctx()
+    tv_session, auth_state = ctx["session"], ctx["auth"]
+    with ctx["lock"]:
         if not auth_state["referenceId"]:
             return jsonify({"ok": False, "error": "No auth in progress"})
         payload = {
@@ -1467,7 +1574,14 @@ def auth_status():
 
 @app.route("/api/auth/set_test_user", methods=["POST"])
 def auth_set_test_user():
-    """Set test user SSN for the current auth session (dev/test only)."""
+    """Set test user SSN for the current auth session (dev/test only).
+
+    Disabled unless ALLOW_TEST_USER is set: this flips the caller's auth_state to
+    authenticated without BankID, so leaving it open in production is an auth
+    bypass. App Store review uses /api/auth/demo_login instead."""
+    if os.environ.get("ALLOW_TEST_USER", "").strip() not in ("1", "true", "True"):
+        abort(404)
+    tv_session, auth_state = _tv()
     data = request.json
     ssn = data.get("ssn", "")
     ref_id = auth_state.get("referenceId")
@@ -1489,22 +1603,17 @@ def auth_set_test_user():
 
 @app.route("/api/auth/logout", methods=["POST"])
 def auth_logout():
-    """Sign out of the Trafikverket session."""
-    global tv_session
+    """Sign out of the Trafikverket session (this browser only)."""
+    session.pop("demo_reviewer", None)
+    ctx = _tv_ctx()
     try:
-        tv_session.post(TV_BASE + "/sign-out", json=None, timeout=10)
+        ctx["session"].post(TV_BASE + "/sign-out", json=None, timeout=10)
     except Exception:
         pass
-    auth_state["authenticated"] = False
-    auth_state["referenceId"] = None
-    tv_session = http_requests.Session()
-    tv_session.headers.update({
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-        "X-Requested-With": "XMLHttpRequest",
-        "Content-Type": "application/json; charset=utf-8",
-        "Origin": "https://fp.trafikverket.se",
-        "Referer": "https://fp.trafikverket.se/Boka/ng",
-    })
+    # Drop the authenticated session entirely and start a clean one so no TV
+    # cookies survive the logout.
+    ctx["session"] = _new_tv_session()
+    ctx["auth"] = _new_auth_state()
     return jsonify({"ok": True})
 
 
@@ -1514,6 +1623,11 @@ def auth_logout():
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
     """Run a full scan of all configured locations. Returns times + changes."""
+    if _is_demo_reviewer():
+        slots = _demo_slots()
+        return jsonify({"ok": True, "times": slots, "added": slots,
+                        "removed": [], "auto_claim": None})
+    tv_session, auth_state = _tv()
     if not auth_state["authenticated"]:
         return jsonify({"ok": False, "error": "Not authenticated"}), 401
 
@@ -1567,8 +1681,8 @@ def api_scan():
     # Parallel scan using thread pool
     collected = []
     with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(_fetch_location, ssn, exam_type_id, lid,
-                                    licence_id, vehicle_type_id): lid
+        futures = {executor.submit(_fetch_location, tv_session, ssn, exam_type_id,
+                                    lid, licence_id, vehicle_type_id): lid
                    for lid in scan_ids}
         for future in as_completed(futures):
             try:
@@ -1762,7 +1876,7 @@ def api_scan():
     # holds) and reappear (their hold expired) after a previous SMS.
     auto_claim_result = None
     if added and config.get("auto_reserve_enabled") and auth_state["authenticated"]:
-        existing = _tv_active_reservations()
+        existing = _tv_active_reservations(tv_session)
         if existing:
             app.logger.info("auto_reserve: skipped, %d existing hold(s)", len(existing))
             log = load_activity_log()
@@ -1776,7 +1890,7 @@ def api_scan():
             auto_claim_result = {"skipped": "existing_hold", "existing": existing}
         else:
             earliest = sorted(added, key=lambda t: t.get("date", "") + t.get("time", ""))[0]
-            body, status = _claim_slot_at_tv(earliest, config)
+            body, status = _claim_slot_at_tv(tv_session, earliest, config)
             app.logger.info("auto_reserve: claim %s %s @ %s -> http=%s ok=%s",
                              earliest.get("date"), earliest.get("time"),
                              earliest.get("location"), status, body.get("ok"))
@@ -1806,8 +1920,9 @@ def api_location_ids():
 @app.route("/api/reserve", methods=["POST"])
 def api_reserve():
     """Create a 15-minute reservation hold on a found time slot."""
-    # Live-läge krävs: bokning bakom betalvägg.
-    if stripe_enabled() and not is_session_paid():
+    # Live-läge krävs: bokning bakom betalvägg. App Store-granskare (demo)
+    # släpps förbi så de kan testa hela bokningsflödet.
+    if stripe_enabled() and not is_session_paid() and not _is_demo_reviewer():
         return jsonify({
             "ok": False,
             "error": "live_required",
@@ -1892,6 +2007,11 @@ def api_verify_slot():
     """Re-query Trafikverket for a single location right before the user clicks
     Boka, to detect slots that have already been taken (the most common reason
     a found slot does not appear when the user lands on Trafikverket)."""
+    if _is_demo_reviewer():
+        return jsonify({"ok": True, "still_available": True,
+                        "checked_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                        "alternatives_count": len(_demo_slots())})
+    tv_session, auth_state = _tv()
     if not auth_state["authenticated"]:
         return jsonify({"ok": False, "error": "Not authenticated"}), 401
     data = request.get_json(silent=True) or {}
@@ -1909,7 +2029,7 @@ def api_verify_slot():
     lp = LICENCE_PARAMS.get(licence_type, LICENCE_PARAMS["B"])
     exam_type_id = lp["exam_ids"].get(exam_type, EXAM_TYPE_IDS.get(exam_type, 12))
 
-    fresh = _fetch_location(ssn, exam_type_id, location_id,
+    fresh = _fetch_location(tv_session, ssn, exam_type_id, location_id,
                             lp["licence_id"], lp["vehicle_type_id"])
     still_there = any(
         t.get("date") == date and t.get("time") == time for t in fresh
@@ -1945,11 +2065,11 @@ def _build_booking_session(config: dict) -> tuple[dict, dict]:
     return booking_session, lp
 
 
-def _tv_active_reservations() -> list[dict]:
+def _tv_active_reservations(sess: "http_requests.Session") -> list[dict]:
     """Return the user's currently-held reservations at Trafikverket, or []."""
     try:
-        r = tv_session.post(TV_BASE + "/get-active-reservations",
-                            json={}, timeout=15)
+        r = sess.post(TV_BASE + "/get-active-reservations",
+                      json={}, timeout=15)
         body = r.json()
         return (body.get("data") or {}).get("activeReservations") or []
     except Exception as e:
@@ -1957,7 +2077,8 @@ def _tv_active_reservations() -> list[dict]:
         return []
 
 
-def _claim_slot_at_tv(slot: dict, config: dict) -> tuple[dict, int]:
+def _claim_slot_at_tv(sess: "http_requests.Session", slot: dict,
+                      config: dict) -> tuple[dict, int]:
     """Reverse-engineered Trafikverket /create-reservation claim.
 
     Returns (response_dict, http_status). On success the slot is held in
@@ -1981,7 +2102,7 @@ def _claim_slot_at_tv(slot: dict, config: dict) -> tuple[dict, int]:
     }
 
     try:
-        r = tv_session.post(
+        r = sess.post(
             TV_BASE + "/occasion-bundles",
             json={"bookingSession": booking_session,
                   "occasionBundleQuery": occasion_bundle_query},
@@ -2010,7 +2131,7 @@ def _claim_slot_at_tv(slot: dict, config: dict) -> tuple[dict, int]:
                 "message": "Tiden är inte längre tillgänglig."}, 409
 
     try:
-        rr = tv_session.post(
+        rr = sess.post(
             TV_BASE + "/create-reservation",
             json={"bookingSession": booking_session,
                   "occasionBundle": target_bundle},
@@ -2040,7 +2161,7 @@ def _claim_slot_at_tv(slot: dict, config: dict) -> tuple[dict, int]:
                 "tv_response": result}, 502
 
     held = None
-    for r_ in _tv_active_reservations():
+    for r_ in _tv_active_reservations(sess):
         if (r_.get("startDate", "").startswith(date)
                 and time in r_.get("startDate", "")):
             held = r_
@@ -2064,11 +2185,12 @@ def _claim_slot_at_tv(slot: dict, config: dict) -> tuple[dict, int]:
 @app.route("/api/book_slot", methods=["POST"])
 def api_book_slot():
     """Claim a slot at Trafikverket via /create-reservation (15-min hold)."""
+    tv_session, auth_state = _tv()
     if not auth_state["authenticated"]:
         return jsonify({"ok": False, "error": "Not authenticated"}), 401
     data = request.get_json(silent=True) or {}
     slot = data.get("slot") or {}
-    body, status = _claim_slot_at_tv(slot, load_config())
+    body, status = _claim_slot_at_tv(tv_session, slot, load_config())
     return jsonify(body), status
 
 
@@ -2078,6 +2200,7 @@ def api_book_diagnose():
     is blocking /create-reservation. Calls get-active-reservations,
     get-confirmed-examinations, and booking-hindrances and returns each
     raw response verbatim."""
+    tv_session, auth_state = _tv()
     if not auth_state["authenticated"]:
         return jsonify({"ok": False, "error": "Not authenticated"}), 401
 
@@ -2121,6 +2244,7 @@ def _location_name_map() -> dict[int, str]:
 def api_booked_examinations():
     """Return the user's confirmed (paid) exams and active (held) reservations
     from Trafikverket, with location names resolved."""
+    tv_session, auth_state = _tv()
     if not auth_state["authenticated"]:
         return jsonify({"ok": False, "error": "Not authenticated"}), 401
 
