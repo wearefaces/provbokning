@@ -16,6 +16,9 @@ import ssl
 import uuid
 import hmac
 import threading
+# Aliased: `time` is used as a local variable for slot times elsewhere in this
+# module, and a bare `import time` would read as a shadowing bug.
+import time as _time
 from email.message import EmailMessage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
@@ -23,8 +26,8 @@ from pathlib import Path
 
 import requests as http_requests
 from flask import (
-    Flask, Response, abort, redirect, render_template, request, jsonify,
-    send_from_directory, session, url_for,
+    Flask, Response, abort, has_request_context, redirect, render_template,
+    request, jsonify, send_from_directory, session, url_for,
 )
 try:
     from flask_cors import CORS  # type: ignore
@@ -71,10 +74,8 @@ if not CONFIG_PATH.exists() and (PROJECT_DIR / "config.json").exists():
 
 LOCATIONS_PATH = SEED_DATA_DIR / "valid_locations.json"
 LOCATION_DETAILS_PATH = SEED_DATA_DIR / "location_details.json"
-SNAPSHOT_PATH = DATA_DIR / "last_snapshot.json"
-RESERVATIONS_PATH = DATA_DIR / "reservations.json"
-LOG_PATH = DATA_DIR / "activity_log.json"
-SMS_NOTIFIED_PATH = DATA_DIR / "sms_notified.json"
+# Snapshot, reservations, activity log and SMS dedup are per-user now — see
+# USERS_DIR / load_user_state.
 SUBSCRIBERS_PATH = DATA_DIR / "subscribers.json"
 PAID_SESSIONS_PATH = DATA_DIR / "paid_sessions.json"
 
@@ -290,7 +291,9 @@ def _init_tv_session(sess: "http_requests.Session"):
         pass
 
 
-def load_config() -> dict:
+def load_server_config() -> dict:
+    """Server-wide config: notification credentials and infra settings only.
+    User-owned search fields live in each user's own record — see load_config."""
     with open(CONFIG_PATH, "r") as f:
         return json.load(f)
 
@@ -305,62 +308,195 @@ def load_location_ids() -> dict:
         return json.load(f)
 
 
-def load_snapshot() -> list[dict]:
-    if SNAPSHOT_PATH.exists():
-        with open(SNAPSHOT_PATH, "r") as f:
-            return json.load(f)
-    return []
+# ── Per-user state ──
+# Search criteria, snapshot, notify dedup, reservations and activity log are all
+# per-user: they used to live in single shared files, so whoever saved settings
+# last overwrote everyone's personnummer, locations, dates and SMS number, and
+# every user's scan diffed against (and consumed) one shared snapshot.
+# Keyed by the same Flask session id as the Trafikverket session (_tv_store).
+USERS_DIR = DATA_DIR / "users"
+
+# Fields each user owns. Anything here is NEVER read from the shared
+# config.json, so a new user can't inherit another user's personnummer.
+USER_CONFIG_DEFAULTS = {
+    "swedish_ssn": "",
+    "licence_type": "B",
+    "exam_type": "Körprov",
+    "locations": [],
+    "date_from": "2020-01-01",
+    "date_to": "2030-12-31",
+    "sms_enabled": False,
+    "sms_to": "",
+    "auto_reserve_enabled": False,
+    "check_interval_seconds": 300,
+    "watch_enabled": False,
+}
+
+# Server-owned keys, read from the shared config.json for every user.
+SERVER_CONFIG_FIELDS = (
+    "sms_api_username", "sms_api_password",
+    "ntfy_enabled", "ntfy_topic", "ntfy_server",
+    "smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from",
+)
+
+# Bounds for the server-side watch interval. The floor keeps a user from
+# hammering Trafikverket (each scan is one request per selected location).
+WATCH_MIN_INTERVAL_SECONDS = 60
+WATCH_MAX_INTERVAL_SECONDS = 3600
+
+_user_state_lock = threading.Lock()
 
 
-def save_snapshot(times: list[dict]):
-    with open(SNAPSHOT_PATH, "w") as f:
-        json.dump(times, f, indent=2, ensure_ascii=False)
+def _clean_interval(value) -> int:
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return USER_CONFIG_DEFAULTS["check_interval_seconds"]
+    return max(WATCH_MIN_INTERVAL_SECONDS, min(WATCH_MAX_INTERVAL_SECONDS, seconds))
 
 
-def load_reservations() -> list[dict]:
-    if RESERVATIONS_PATH.exists():
-        with open(RESERVATIONS_PATH, "r") as f:
-            return json.load(f)
-    return []
+def _safe_sid(sid: str) -> str:
+    """sid becomes a filename, so allow only the hex our own uuid4().hex emits."""
+    sid = (sid or "").strip()
+    if not sid or not re.fullmatch(r"[0-9a-fA-F]{8,64}", sid):
+        raise ValueError(f"invalid session id: {sid!r}")
+    return sid.lower()
 
 
-def save_reservations(reservations: list[dict]):
-    with open(RESERVATIONS_PATH, "w") as f:
-        json.dump(reservations, f, indent=2, ensure_ascii=False)
+def _user_state_path(sid: str) -> Path:
+    return USERS_DIR / f"{_safe_sid(sid)}.json"
 
 
-def load_activity_log() -> list[dict]:
-    if LOG_PATH.exists():
-        with open(LOG_PATH, "r") as f:
-            return json.load(f)
-    return []
+def load_user_state(sid: str | None = None) -> dict:
+    """Whole per-user record. Missing/corrupt records read as empty."""
+    sid = sid or _current_sid()
+    path = _user_state_path(sid)
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
 
-def save_activity_log(log: list[dict]):
-    with open(LOG_PATH, "w") as f:
-        json.dump(log[-200:], f, indent=2, ensure_ascii=False)
+def _write_user_state(sid: str, state: dict) -> None:
+    path = _user_state_path(sid)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
+    tmp.replace(path)
+
+
+def update_user_state(sid: str | None, key: str, value) -> None:
+    """Set one top-level key in a user's record under a lock, so the background
+    watcher thread and request threads can't clobber each other's writes."""
+    sid = sid or _current_sid()
+    with _user_state_lock:
+        state = load_user_state(sid)
+        state[key] = value
+        _write_user_state(sid, state)
+
+
+def _adopt_legacy_config(sid: str, server: dict) -> dict:
+    """One-time migration for the original owner. Before configs were per-user,
+    the shared config.json held one person's real search fields. Give them to
+    the admin session on first use so the live setup survives the upgrade;
+    everyone else starts from clean defaults (never another user's SSN)."""
+    if not (has_request_context() and _is_admin()):
+        return {}
+    legacy = {k: server[k] for k in USER_CONFIG_DEFAULTS if k in server}
+    if not legacy.get("swedish_ssn"):
+        return {}
+    app.logger.info("adopting legacy config.json search fields for admin sid=%s", sid)
+    return save_user_config(legacy, sid)
+
+
+def load_config(sid: str | None = None) -> dict:
+    """This user's effective config: their own search/notify fields merged over
+    the server's shared credentials. Pass sid explicitly outside a request."""
+    sid = sid or _current_sid()
+    server = load_server_config()
+    config = {k: v for k, v in server.items() if k in SERVER_CONFIG_FIELDS}
+    state = load_user_state(sid)
+    stored = state.get("config")
+    if stored is None:
+        stored = _adopt_legacy_config(sid, server)
+    for key, default in USER_CONFIG_DEFAULTS.items():
+        config[key] = stored.get(key, default)
+    return config
+
+
+def save_user_config(fields: dict, sid: str | None = None) -> dict:
+    """Merge user-owned fields into this user's record. Unknown keys ignored."""
+    sid = sid or _current_sid()
+    with _user_state_lock:
+        state = load_user_state(sid)
+        stored = dict(state.get("config") or {})
+        for key in USER_CONFIG_DEFAULTS:
+            if key in fields:
+                stored[key] = fields[key]
+        state["config"] = stored
+        _write_user_state(sid, state)
+    return stored
+
+
+def load_snapshot(sid: str | None = None) -> list[dict]:
+    snap = load_user_state(sid).get("snapshot")
+    return snap if isinstance(snap, list) else []
+
+
+def save_snapshot(times: list[dict], sid: str | None = None):
+    update_user_state(sid, "snapshot", times)
+
+
+def load_reservations(sid: str | None = None) -> list[dict]:
+    res = load_user_state(sid).get("reservations")
+    return res if isinstance(res, list) else []
+
+
+def save_reservations(reservations: list[dict], sid: str | None = None):
+    update_user_state(sid, "reservations", reservations)
+
+
+def load_activity_log(sid: str | None = None) -> list[dict]:
+    log = load_user_state(sid).get("log")
+    return log if isinstance(log, list) else []
+
+
+def save_activity_log(log: list[dict], sid: str | None = None):
+    update_user_state(sid, "log", log[-200:])
+
+
+def log_activity(entry: dict, sid: str | None = None):
+    """Append one entry to this user's activity log."""
+    sid = sid or _current_sid()
+    with _user_state_lock:
+        state = load_user_state(sid)
+        log = state.get("log")
+        log = log if isinstance(log, list) else []
+        log.append(entry)
+        state["log"] = log[-200:]
+        _write_user_state(sid, state)
 
 
 def make_key(t: dict) -> str:
     return f"{t.get('date','')}|{t.get('time','')}|{t.get('location','')}|{t.get('name','')}"
 
 
-def load_sms_notified() -> dict:
+def load_sms_notified(sid: str | None = None) -> dict:
     """Return {slot_key: iso_expiry} of recently SMS-notified slots, dropping expired."""
-    if not SMS_NOTIFIED_PATH.exists():
-        return {}
-    try:
-        with open(SMS_NOTIFIED_PATH, "r") as f:
-            data = json.load(f)
-    except Exception:
+    data = load_user_state(sid).get("notified")
+    if not isinstance(data, dict):
         return {}
     now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return {k: v for k, v in data.items() if isinstance(v, str) and v > now_iso}
 
 
-def save_sms_notified(notified: dict):
-    with open(SMS_NOTIFIED_PATH, "w") as f:
-        json.dump(notified, f, indent=2, ensure_ascii=False)
+def save_sms_notified(notified: dict, sid: str | None = None):
+    update_user_state(sid, "notified", notified)
 
 
 def send_sms(to: str, message: str, api_user: str, api_pass: str) -> dict:
@@ -533,8 +669,10 @@ def _46elks_owner_mobile(api_user: str, api_pass: str) -> str | None:
 
 
 def send_email(to: str, subject: str, body: str) -> dict:
-    """Send email via SMTP. Reads SMTP_HOST/PORT/USER/PASS/FROM env vars or config."""
-    config = load_config()
+    """Send email via SMTP. Reads SMTP_HOST/PORT/USER/PASS/FROM env vars or config.
+    Server config only — this also runs from the background watcher thread,
+    where there is no request to resolve a per-user config from."""
+    config = load_server_config()
     host = os.environ.get("SMTP_HOST") or config.get("smtp_host", "")
     port = int(os.environ.get("SMTP_PORT") or config.get("smtp_port") or 587)
     user = os.environ.get("SMTP_USER") or config.get("smtp_user", "")
@@ -1096,6 +1234,9 @@ def api_profile_post():
     name = (data.get("name") or "").strip()
     if email:
         session["email"] = email
+        # Also persist it on the user's record: the background watcher has no
+        # Flask session to read the address from when it needs to notify.
+        update_user_state(sid, "email", email)
     if "name" in data:
         session["name"] = name
     session.permanent = True
@@ -1369,44 +1510,63 @@ def api_subscribers_delete(sub_id):
 
 @app.route("/save_config", methods=["POST"])
 def save_config_route():
-    """Public endpoint: only user-facing search/notification fields.
-    Admin-only credential fields are silently ignored unless caller is admin."""
+    """Public endpoint: saves the caller's OWN search/notification fields into
+    their per-user record. Admin-only credential fields still go to the shared
+    server config, and only when the caller is admin."""
     data = request.json or {}
-    config = load_config()
-    config["swedish_ssn"] = data.get("swedish_ssn", "").strip()
-    config["licence_type"] = data.get("licence_type", "B")
-    config["exam_type"] = data.get("exam_type", "Körprov")
     locs = data.get("locations", "")
-    if isinstance(locs, list):
-        config["locations"] = [l.strip() for l in locs if l.strip()]
-    else:
-        config["locations"] = [l.strip() for l in locs.split(",") if l.strip()]
-    config["date_from"] = data.get("date_from", "2026-04-13")
-    config["date_to"] = data.get("date_to", "2026-12-31")
-    config["sms_enabled"] = data.get("sms_enabled", False)
-    config["sms_to"] = data.get("sms_to", "").strip()
+    if not isinstance(locs, list):
+        locs = locs.split(",")
 
-    # Admin-only keys: ignored unless logged in as admin
+    user_fields = {
+        "swedish_ssn": data.get("swedish_ssn", "").strip(),
+        "licence_type": data.get("licence_type", "B"),
+        "exam_type": data.get("exam_type", "Körprov"),
+        "locations": [l.strip() for l in locs if l.strip()],
+        "date_from": data.get("date_from", "2026-04-13"),
+        "date_to": data.get("date_to", "2026-12-31"),
+        "sms_enabled": data.get("sms_enabled", False),
+        "sms_to": data.get("sms_to", "").strip(),
+    }
+    for key in ("auto_reserve_enabled", "watch_enabled"):
+        if key in data:
+            user_fields[key] = bool(data.get(key))
+    if "check_interval_seconds" in data:
+        user_fields["check_interval_seconds"] = _clean_interval(
+            data.get("check_interval_seconds"))
+    save_user_config(user_fields)
+
+    # Admin-only keys: shared by the whole server, ignored for non-admins
     if _is_admin():
+        config = load_server_config()
+        touched = False
         if "sms_api_username" in data:
             config["sms_api_username"] = data.get("sms_api_username", "").strip()
+            touched = True
         if "sms_api_password" in data:
             config["sms_api_password"] = data.get("sms_api_password", "").strip()
+            touched = True
         if "ntfy_enabled" in data:
             config["ntfy_enabled"] = bool(data.get("ntfy_enabled"))
+            touched = True
         if "ntfy_topic" in data:
             config["ntfy_topic"] = data.get("ntfy_topic", "").strip()
+            touched = True
         if "ntfy_server" in data:
             config["ntfy_server"] = (data.get("ntfy_server") or "https://ntfy.sh").strip()
+            touched = True
         for k in ("smtp_host", "smtp_user", "smtp_pass", "smtp_from"):
             if k in data:
                 config[k] = (data.get(k) or "").strip()
+                touched = True
         if "smtp_port" in data:
             try:
                 config["smtp_port"] = int(data.get("smtp_port") or 587)
             except (TypeError, ValueError):
                 config["smtp_port"] = 587
-    save_config_file(config)
+            touched = True
+        if touched:
+            save_config_file(config)
     return jsonify({"status": "ok"})
 
 
@@ -1414,7 +1574,9 @@ def save_config_route():
 def save_admin_config():
     """Admin-only endpoint for credential / notification-channel fields."""
     data = request.json or {}
-    config = load_config()
+    # Shared server config only — never the merged view, or the admin's own
+    # search fields (personnummer included) would leak back into config.json.
+    config = load_server_config()
     if "sms_api_username" in data:
         config["sms_api_username"] = data.get("sms_api_username", "").strip()
     if "sms_api_password" in data:
@@ -1422,7 +1584,8 @@ def save_admin_config():
     if "ntfy_enabled" in data:
         config["ntfy_enabled"] = bool(data.get("ntfy_enabled"))
     if "auto_reserve_enabled" in data:
-        config["auto_reserve_enabled"] = bool(data.get("auto_reserve_enabled"))
+        # Per-user setting: applies to the admin's own searches.
+        save_user_config({"auto_reserve_enabled": bool(data.get("auto_reserve_enabled"))})
     if "ntfy_topic" in data:
         config["ntfy_topic"] = data.get("ntfy_topic", "").strip()
     if "ntfy_server" in data:
@@ -1620,28 +1783,22 @@ def auth_logout():
 # ── Scanning ──
 
 
-@app.route("/api/scan", methods=["POST"])
-def api_scan():
-    """Run a full scan of all configured locations. Returns times + changes."""
-    if _is_demo_reviewer():
-        slots = _demo_slots()
-        return jsonify({"ok": True, "times": slots, "added": slots,
-                        "removed": [], "auto_claim": None})
-    tv_session, auth_state = _tv()
-    if not auth_state["authenticated"]:
-        return jsonify({"ok": False, "error": "Not authenticated"}), 401
-
-    config = load_config()
-    ssn = config.get("swedish_ssn", "")
+def _scan_targets(config: dict) -> tuple[list[int], dict]:
+    """Resolve which Trafikverket location IDs this config wants scanned, plus
+    the licence/exam parameters the occasion query needs."""
     exam_type = config.get("exam_type", "Körprov")
     licence_type = config.get("licence_type", "B")
     lp = LICENCE_PARAMS.get(licence_type, LICENCE_PARAMS["B"])
-    exam_type_id = lp["exam_ids"].get(exam_type, EXAM_TYPE_IDS.get(exam_type, 12))
-    licence_id = lp["licence_id"]
-    vehicle_type_id = lp["vehicle_type_id"]
-    date_from = config.get("date_from", "2020-01-01")
-    date_to = config.get("date_to", "2030-12-31")
+    params = {
+        "ssn": config.get("swedish_ssn", ""),
+        "exam_type": exam_type,
+        "licence_type": licence_type,
+        "exam_type_id": lp["exam_ids"].get(exam_type, EXAM_TYPE_IDS.get(exam_type, 12)),
+        "licence_id": lp["licence_id"],
+        "vehicle_type_id": lp["vehicle_type_id"],
+    }
     selected_locs = [l.lower() for l in config.get("locations", [])]
+    params["selected_locs"] = selected_locs
 
     all_loc_data = load_location_ids()
     licence_locs = all_loc_data.get(licence_type, all_loc_data)
@@ -1650,263 +1807,405 @@ def api_scan():
     else:
         all_ids = licence_locs
     if not all_ids:
-        return jsonify({"ok": True, "times": [], "added": [], "removed": []})
+        return [], params
 
-    # If specific locations selected, only scan those
-    if selected_locs:
-        # Build name->id map from location_details, but only for IDs valid for this licence/exam
-        valid_id_set = set(all_ids)
-        loc_detail_map = {}
-        if LOCATION_DETAILS_PATH.exists():
-            with open(LOCATION_DETAILS_PATH, "r") as f:
-                for loc in json.load(f).get("locations", []):
-                    lid = loc["id"]
-                    name = loc["name"].lower()
-                    # Prefer IDs that match the current licence type's valid locations
-                    if lid in valid_id_set:
-                        loc_detail_map[name] = lid
-                    elif name not in loc_detail_map:
-                        loc_detail_map[name] = lid
-        scan_ids = [loc_detail_map[n] for n in selected_locs if n in loc_detail_map]
-        # Only keep IDs that are valid for this licence type
-        scan_ids = [sid for sid in scan_ids if sid in valid_id_set] or scan_ids
-        if not scan_ids:
-            scan_ids = all_ids
-    else:
-        scan_ids = all_ids
+    if not selected_locs:
+        return all_ids, params
 
-    app.logger.info("Scanning location IDs: %s (licence=%s, exam=%s/%s)",
-                     scan_ids, licence_type, exam_type, exam_type_id)
+    # Build name->id map from location_details, but only for IDs valid for this licence/exam
+    valid_id_set = set(all_ids)
+    loc_detail_map = {}
+    if LOCATION_DETAILS_PATH.exists():
+        with open(LOCATION_DETAILS_PATH, "r") as f:
+            for loc in json.load(f).get("locations", []):
+                lid = loc["id"]
+                name = loc["name"].lower()
+                # Prefer IDs that match the current licence type's valid locations
+                if lid in valid_id_set:
+                    loc_detail_map[name] = lid
+                elif name not in loc_detail_map:
+                    loc_detail_map[name] = lid
+    scan_ids = [loc_detail_map[n] for n in selected_locs if n in loc_detail_map]
+    # Only keep IDs that are valid for this licence type
+    scan_ids = [lid for lid in scan_ids if lid in valid_id_set] or scan_ids
+    return (scan_ids or all_ids), params
 
-    # Parallel scan using thread pool
-    collected = []
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {executor.submit(_fetch_location, tv_session, ssn, exam_type_id,
-                                    lid, licence_id, vehicle_type_id): lid
-                   for lid in scan_ids}
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-                collected.extend(result)
-            except Exception:
-                pass
 
-    # Filter by date range
-    collected = [t for t in collected if date_from <= t["date"] <= date_to]
+def _slots_message(slots: list[dict]) -> str:
+    """Swedish SMS/push body listing up to 5 slots."""
+    dn = ["sön", "mån", "tis", "ons", "tor", "fre", "lör"]
+    mn = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
+    lines = []
+    for t in sorted(slots, key=lambda x: x["date"] + x["time"])[:5]:
+        try:
+            from datetime import date as _date
+            parts = t["date"].split("-")
+            d = _date(int(parts[0]), int(parts[1]), int(parts[2]))
+            dl = f"{dn[(d.weekday() + 1) % 7]} {d.day} {mn[d.month - 1]}"
+        except Exception:
+            dl = t["date"]
+        lines.append(f"{dl} {t['time']} - {t['location']}")
+    msg = "Ledig provtid hittad!\n" + "\n".join(lines)
+    if len(slots) > 5:
+        msg += f"\n+{len(slots) - 5} fler tider"
+    return msg
 
-    # Filter by selected locations (API may return nearby/unrelated locations)
-    if selected_locs:
-        collected = [t for t in collected if t.get("location", "").lower() in selected_locs]
 
-    collected.sort(key=lambda t: t["date"] + t["time"])
+def _user_email(sid: str) -> str:
+    """This user's notification email: their saved profile email, falling back to
+    whatever their paid-session record holds. Works without a request context."""
+    email = (load_user_state(sid).get("email") or "").strip()
+    if email:
+        return email
+    entry = load_paid_sessions().get(sid) or {}
+    return (entry.get("email") or "").strip()
 
-    # Compute changes vs previous snapshot
-    previous = load_snapshot()
-    current_keys = {make_key(t): t for t in collected}
-    previous_keys = {make_key(t): t for t in previous}
-    added = [current_keys[k] for k in current_keys if k not in previous_keys]
-    removed = [previous_keys[k] for k in previous_keys if k not in current_keys]
 
-    save_snapshot(collected)
-
-    # Send SMS notification for slots not recently notified (independent of snapshot diff).
-    # Using snapshot-based "added" alone is unreliable because a slot may already be in
-    # the snapshot from a prior scan run, so we dedupe by slot key with a TTL instead.
-    sms_enabled = bool(config.get("sms_enabled"))
-    sms_to = config.get("sms_to", "").strip()
-    # Prefer env vars (safer in deployment) but fall back to config.json
-    sms_user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
-    sms_pass = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
-    # SMS fires if creds are present AND (legacy sms_to is set OR there are phone subscribers).
-    _has_phone_subs = any(is_sub_paid(s) and s.get("phone") for s in load_subscribers())
-    sms_configured = sms_enabled and sms_user and sms_pass and (bool(sms_to) or _has_phone_subs)
-
-    ntfy_enabled = bool(config.get("ntfy_enabled"))
-    ntfy_topic = (config.get("ntfy_topic") or "").strip()
-    ntfy_server = (config.get("ntfy_server") or "https://ntfy.sh").strip()
-    ntfy_configured = ntfy_enabled and ntfy_topic
-
-    notified = load_sms_notified()
-    to_notify = [t for t in collected if make_key(t) not in notified]
-
-    def _build_message():
-        dn = ["sön", "mån", "tis", "ons", "tor", "fre", "lör"]
-        mn = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
-        lines = []
-        for t in sorted(to_notify, key=lambda x: x["date"] + x["time"])[:5]:
-            try:
-                from datetime import date as _date
-                parts = t["date"].split("-")
-                d = _date(int(parts[0]), int(parts[1]), int(parts[2]))
-                dl = f"{dn[(d.weekday() + 1) % 7]} {d.day} {mn[d.month - 1]}"
-            except Exception:
-                dl = t["date"]
-            lines.append(f"{dl} {t['time']} - {t['location']}")
-        msg = "Ledig provtid hittad!\n" + "\n".join(lines)
-        if len(to_notify) > 5:
-            msg += f"\n+{len(to_notify) - 5} fler tider"
-        return msg
-
+def _notify_user(sid: str, config: dict, to_notify: list[dict],
+                 base_url: str = "") -> bool:
+    """Notify ONE user about their own found slots. Recipients come from that
+    user's own config, never from a shared list — a scan run for user A must
+    never text user B. Returns True if any channel accepted the message."""
+    if not to_notify:
+        return False
+    msg = _slots_message(to_notify)
     any_sent_ok = False
 
-    if to_notify and ntfy_configured:
+    # ntfy: server-wide admin channel, off unless the admin configured a topic.
+    ntfy_topic = (config.get("ntfy_topic") or "").strip()
+    if config.get("ntfy_enabled") and ntfy_topic:
+        ntfy_server = (config.get("ntfy_server") or "https://ntfy.sh").strip()
         try:
-            ntfy_result = send_ntfy(ntfy_topic, "Ledig provtid hittad!",
-                                    _build_message(), server=ntfy_server)
+            ntfy_result = send_ntfy(ntfy_topic, "Ledig provtid hittad!", msg,
+                                    server=ntfy_server)
         except Exception as e:
             app.logger.error("ntfy send failed: %s", e)
             ntfy_result = {"ok": False, "error": str(e)}
         if ntfy_result.get("ok"):
             any_sent_ok = True
-        log = load_activity_log()
-        log.append({
+        log_activity({
             "type": "ntfy_sent" if ntfy_result.get("ok") else "ntfy_failed",
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "topic": ntfy_topic,
             "notified_count": len(to_notify),
-            "result": {k: ntfy_result.get(k) for k in ("ok", "status", "error") if k in ntfy_result},
-        })
-        save_activity_log(log)
+            "result": {k: ntfy_result.get(k) for k in ("ok", "status", "error")
+                       if k in ntfy_result},
+        }, sid)
 
-    if to_notify and sms_configured:
-        msg = _build_message()
-        # Collect all SMS recipients: legacy single sms_to + active subscribers
-        sms_recipients = []
-        if sms_to:
-            sms_recipients.append(sms_to)
-        for sub in load_subscribers():
-            if is_sub_paid(sub) and sub.get("phone") and sub["phone"] not in sms_recipients:
-                sms_recipients.append(sub["phone"])
-
-        sms_results = []
-        any_sms_ok = False
-        for recipient in sms_recipients:
-            try:
-                r = send_sms(recipient, msg, sms_user, sms_pass)
-            except Exception as e:
-                app.logger.error("SMS send failed to %s: %s", recipient, e)
-                r = {"ok": False, "error": str(e)}
-            if r.get("ok"):
-                any_sms_ok = True
-            sms_results.append({
-                "to": recipient,
-                "ok": r.get("ok"),
-                "status": r.get("status"),
-                "from": r.get("from"),
-                "error": r.get("error"),
-                "data": (r.get("data") or "")[:200],
-            })
-
-        if any_sms_ok:
+    # SMS to this user's own number. Prefer env creds (safer in deployment).
+    sms_to = (config.get("sms_to") or "").strip()
+    sms_user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
+    sms_pass = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
+    if config.get("sms_enabled") and sms_to and sms_user and sms_pass:
+        try:
+            r = send_sms(sms_to, msg, sms_user, sms_pass)
+        except Exception as e:
+            app.logger.error("SMS send failed to %s: %s", sms_to, e)
+            r = {"ok": False, "error": str(e)}
+        if r.get("ok"):
             any_sent_ok = True
-
-        log = load_activity_log()
-        log.append({
-            "type": "sms_sent" if any_sms_ok else "sms_failed",
+        log_activity({
+            "type": "sms_sent" if r.get("ok") else "sms_failed",
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "recipients": len(sms_recipients),
             "notified_count": len(to_notify),
-            "results": sms_results[:10],
-        })
-        save_activity_log(log)
+            "results": [{"to": sms_to, "ok": r.get("ok"), "status": r.get("status"),
+                         "from": r.get("from"), "error": r.get("error"),
+                         "data": (r.get("data") or "")[:200]}],
+        }, sid)
 
-    # ── Email fan-out to subscribers with email ──
-    email_recipients = [s for s in load_subscribers()
-                        if is_sub_paid(s) and s.get("email")]
-    if to_notify and email_recipients:
-        msg_text = _build_message()
-        email_results = []
-        any_email_ok = False
-        base_url = request.host_url.rstrip("/") if request else ""
-        for sub in email_recipients:
-            unsub_link = f"{base_url}/api/unsubscribe?token={sub.get('unsubscribe_token','')}"
-            body = (
-                f"{msg_text}\n\n"
-                f"Boka direkt: https://fp.trafikverket.se/boka/ng\n\n"
-                f"Avregistrera: {unsub_link}\n"
-            )
-            try:
-                r = send_email(sub["email"], "Ledig provtid hittad!", body)
-            except Exception as e:
-                app.logger.error("Email send failed to %s: %s", sub["email"], e)
-                r = {"ok": False, "error": str(e)}
-            if r.get("ok"):
-                any_email_ok = True
-            email_results.append({"to": sub["email"], "ok": r.get("ok"), "error": r.get("error")})
-        if any_email_ok:
+    # Email to this user's own address.
+    email = _user_email(sid)
+    if email:
+        body = (f"{msg}\n\n"
+                f"Boka direkt: https://fp.trafikverket.se/boka/ng\n")
+        if base_url:
+            body += f"\nDina tider: {base_url}/app\n"
+        try:
+            r = send_email(email, "Ledig provtid hittad!", body)
+        except Exception as e:
+            app.logger.error("Email send failed to %s: %s", email, e)
+            r = {"ok": False, "error": str(e)}
+        if r.get("ok"):
             any_sent_ok = True
-        log = load_activity_log()
-        log.append({
-            "type": "email_sent" if any_email_ok else "email_failed",
+        log_activity({
+            "type": "email_sent" if r.get("ok") else "email_failed",
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "recipients": len(email_recipients),
             "notified_count": len(to_notify),
-            "results": email_results[:10],
-        })
-        save_activity_log(log)
+            "results": [{"to": email, "ok": r.get("ok"), "error": r.get("error")}],
+        }, sid)
 
-    if to_notify and any_sent_ok:
+    if not any_sent_ok and not sms_to and not email and not ntfy_topic:
+        app.logger.info("New slots found (%d) but user %s has no notification "
+                        "channel configured", len(to_notify), sid)
+        log_activity({
+            "type": "notify_skipped",
+            "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "reason": "no_channel_configured",
+            "notified_count": len(to_notify),
+        }, sid)
+    return any_sent_ok
+
+
+def _auto_reserve(sid: str, tv_session: "http_requests.Session",
+                  added: list[dict], config: dict) -> dict | None:
+    """Claim the earliest newly-added slot at Trafikverket, unless this user
+    already holds a reservation. Gated on `added` (snapshot diff), NOT on the
+    notify dedup — that would suppress claims for slots that disappear
+    (someone else holds) and reappear after a previous SMS."""
+    existing = _tv_active_reservations(tv_session)
+    if existing:
+        app.logger.info("auto_reserve: skipped, %d existing hold(s)", len(existing))
+        log_activity({
+            "type": "auto_reserve_skipped",
+            "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "reason": "existing_hold",
+            "existing_count": len(existing),
+        }, sid)
+        return {"skipped": "existing_hold", "existing": existing}
+
+    earliest = sorted(added, key=lambda t: t.get("date", "") + t.get("time", ""))[0]
+    body, status = _claim_slot_at_tv(tv_session, earliest, config)
+    app.logger.info("auto_reserve: claim %s %s @ %s -> http=%s ok=%s",
+                     earliest.get("date"), earliest.get("time"),
+                     earliest.get("location"), status, body.get("ok"))
+    log_activity({
+        "type": "auto_reserve_claimed" if body.get("ok") else "auto_reserve_failed",
+        "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "slot": earliest,
+        "result": {"ok": body.get("ok"), "error": body.get("error"),
+                   "held": body.get("held")},
+    }, sid)
+    return {"slot": earliest, "result": body, "http_status": status}
+
+
+def _run_scan(sid: str, ctx: dict, base_url: str = "") -> dict:
+    """One full scan for a single user: fetch every selected location, diff
+    against that user's own snapshot, notify them, optionally auto-reserve.
+
+    Everything is keyed by the passed sid and takes the session explicitly, so
+    this runs identically from an /api/scan request and from the background
+    watcher thread, where there is no request context at all."""
+    tv_session = ctx["session"]
+    config = load_config(sid)
+    scan_ids, params = _scan_targets(config)
+    if not scan_ids:
+        return {"ok": True, "times": [], "added": [], "removed": []}
+
+    app.logger.info("Scanning location IDs: %s (licence=%s, exam=%s/%s)",
+                     scan_ids, params["licence_type"], params["exam_type"],
+                     params["exam_type_id"])
+
+    collected = []
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_fetch_location, tv_session, params["ssn"],
+                                    params["exam_type_id"], lid,
+                                    params["licence_id"],
+                                    params["vehicle_type_id"]): lid
+                   for lid in scan_ids}
+        for future in as_completed(futures):
+            try:
+                collected.extend(future.result())
+            except Exception:
+                pass
+
+    date_from = config.get("date_from", "2020-01-01")
+    date_to = config.get("date_to", "2030-12-31")
+    collected = [t for t in collected if date_from <= t["date"] <= date_to]
+
+    # Filter by selected locations (API may return nearby/unrelated locations)
+    selected_locs = params["selected_locs"]
+    if selected_locs:
+        collected = [t for t in collected
+                     if t.get("location", "").lower() in selected_locs]
+
+    collected.sort(key=lambda t: t["date"] + t["time"])
+
+    # Changes vs this user's previous snapshot
+    previous = load_snapshot(sid)
+    current_keys = {make_key(t): t for t in collected}
+    previous_keys = {make_key(t): t for t in previous}
+    added = [current_keys[k] for k in current_keys if k not in previous_keys]
+    removed = [previous_keys[k] for k in previous_keys if k not in current_keys]
+
+    save_snapshot(collected, sid)
+
+    # Notify for slots not recently notified (independent of the snapshot diff).
+    # Snapshot "added" alone is unreliable because a slot may already be in the
+    # snapshot from a prior run, so dedupe by slot key with a TTL instead.
+    notified = load_sms_notified(sid)
+    to_notify = [t for t in collected if make_key(t) not in notified]
+    if _notify_user(sid, config, to_notify, base_url):
         expiry = (datetime.now(timezone.utc)
                   + timedelta(minutes=SMS_NOTIFY_TTL_MINUTES)
                   ).isoformat().replace("+00:00", "Z")
         for t in to_notify:
             notified[make_key(t)] = expiry
-        save_sms_notified(notified)
+        save_sms_notified(notified, sid)
 
-    if to_notify and not sms_configured and not ntfy_configured:
-        app.logger.info(
-            "New slots found (%d) but no notification channel configured "
-            "(sms_enabled=%s, ntfy_enabled=%s)",
-            len(to_notify), sms_enabled, ntfy_enabled,
-        )
-        log = load_activity_log()
-        log.append({
-            "type": "notify_skipped",
-            "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "reason": "no_channel_configured",
-            "notified_count": len(to_notify),
-            "sms_enabled": sms_enabled,
-            "ntfy_enabled": ntfy_enabled,
-        })
-        save_activity_log(log)
-
-    # ── Auto-claim earliest newly-added slot at Trafikverket (skip if hold exists) ──
-    # Gate on `added` (per-snapshot diff), NOT `to_notify` — the SMS dedup
-    # would otherwise suppress claims for slots that disappear (someone else
-    # holds) and reappear (their hold expired) after a previous SMS.
     auto_claim_result = None
-    if added and config.get("auto_reserve_enabled") and auth_state["authenticated"]:
-        existing = _tv_active_reservations(tv_session)
-        if existing:
-            app.logger.info("auto_reserve: skipped, %d existing hold(s)", len(existing))
-            log = load_activity_log()
-            log.append({
-                "type": "auto_reserve_skipped",
-                "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "reason": "existing_hold",
-                "existing_count": len(existing),
-            })
-            save_activity_log(log)
-            auto_claim_result = {"skipped": "existing_hold", "existing": existing}
-        else:
-            earliest = sorted(added, key=lambda t: t.get("date", "") + t.get("time", ""))[0]
-            body, status = _claim_slot_at_tv(tv_session, earliest, config)
-            app.logger.info("auto_reserve: claim %s %s @ %s -> http=%s ok=%s",
-                             earliest.get("date"), earliest.get("time"),
-                             earliest.get("location"), status, body.get("ok"))
-            log = load_activity_log()
-            log.append({
-                "type": "auto_reserve_claimed" if body.get("ok") else "auto_reserve_failed",
-                "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "slot": earliest,
-                "result": {"ok": body.get("ok"), "error": body.get("error"),
-                           "held": body.get("held")},
-            })
-            save_activity_log(log)
-            auto_claim_result = {"slot": earliest, "result": body, "http_status": status}
+    if added and config.get("auto_reserve_enabled"):
+        auto_claim_result = _auto_reserve(sid, tv_session, added, config)
 
-    return jsonify({"ok": True, "times": collected, "added": added,
-                    "removed": removed, "auto_claim": auto_claim_result})
+    return {"ok": True, "times": collected, "added": added,
+            "removed": removed, "auto_claim": auto_claim_result}
+
+
+@app.route("/api/scan", methods=["POST"])
+def api_scan():
+    """Run a full scan of all configured locations. Returns times + changes."""
+    if _is_demo_reviewer():
+        slots = _demo_slots()
+        return jsonify({"ok": True, "times": slots, "added": slots,
+                        "removed": [], "auto_claim": None})
+    ctx = _tv_ctx()
+    if not ctx["auth"]["authenticated"]:
+        return jsonify({"ok": False, "error": "Not authenticated"}), 401
+    base_url = request.host_url.rstrip("/") if has_request_context() else ""
+    return jsonify(_run_scan(_current_sid(), ctx, base_url))
+
+
+# ── Server-side background watching ──
+# The mobile app used to drive scanning from a Dart Timer.periodic, so searching
+# stopped the moment the phone was locked or the app was backgrounded (iOS
+# suspends the process within seconds). The server watches instead: it keeps
+# scanning on the user's behalf with the app closed, the phone locked, or the
+# phone off, and notifies them when a slot appears.
+#
+# Trafikverket sessions are held in memory only (never written to disk), so a
+# deploy or restart ends watching until the user reopens the app and
+# re-authenticates with BankID.
+
+WATCH_TICK_SECONDS = 15
+
+_watcher_started = False
+_watcher_lock = threading.Lock()
+
+
+def _watch_state(sid: str) -> dict:
+    st = load_user_state(sid).get("watch")
+    return st if isinstance(st, dict) else {}
+
+
+def _watch_due(sid: str, config: dict, now: datetime) -> bool:
+    last = _watch_state(sid).get("last_run")
+    if not last:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    interval = _clean_interval(config.get("check_interval_seconds"))
+    return (now - last_dt).total_seconds() >= interval
+
+
+def _watch_once(sid: str, ctx: dict, now: datetime) -> None:
+    """Scan for one watching user and record the outcome on their record."""
+    base_url = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+    started = now.isoformat().replace("+00:00", "Z")
+    try:
+        result = _run_scan(sid, ctx, base_url)
+        update_user_state(sid, "watch", {
+            "last_run": started,
+            "found": len(result.get("times") or []),
+            "added": len(result.get("added") or []),
+            "last_error": None,
+        })
+    except Exception as e:
+        app.logger.error("watch: scan failed for %s: %s", sid, e)
+        update_user_state(sid, "watch", {
+            "last_run": started,
+            "last_error": str(e)[:300],
+        })
+
+
+def _watch_loop() -> None:
+    """Scan on behalf of every authenticated user who has watching enabled.
+
+    Only users with a live in-memory Trafikverket session are eligible, which is
+    what stops this from touching users who have logged out or been pruned."""
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            with _tv_store_lock:
+                candidates = [(sid, ctx) for sid, ctx in _tv_store.items()
+                              if ctx["auth"].get("authenticated")]
+            for sid, ctx in candidates:
+                try:
+                    config = load_config(sid)
+                    if not config.get("watch_enabled"):
+                        continue
+                    if not _watch_due(sid, config, now):
+                        continue
+                    # Watching counts as activity, so an idle-but-watching user
+                    # is not pruned out of _tv_store mid-watch.
+                    ctx["seen"] = now
+                    _watch_once(sid, ctx, now)
+                except Exception as e:
+                    app.logger.error("watch: user %s failed: %s", sid, e)
+        except Exception as e:  # never let the loop die
+            app.logger.error("watch: loop error: %s", e)
+        _time.sleep(WATCH_TICK_SECONDS)
+
+
+def start_watcher() -> None:
+    """Start the background watcher once per process. Safe to call repeatedly."""
+    global _watcher_started
+    if os.environ.get("DISABLE_WATCHER", "").strip() in ("1", "true", "True"):
+        return
+    with _watcher_lock:
+        if _watcher_started:
+            return
+        _watcher_started = True
+    threading.Thread(target=_watch_loop, name="tv-watcher", daemon=True).start()
+    app.logger.info("background watcher started (tick=%ss)", WATCH_TICK_SECONDS)
+
+
+def _watch_status(sid: str, config: dict) -> dict:
+    ctx_authed = False
+    with _tv_store_lock:
+        ctx = _tv_store.get(sid)
+        if ctx:
+            ctx_authed = bool(ctx["auth"].get("authenticated"))
+    state = _watch_state(sid)
+    return {
+        "ok": True,
+        "enabled": bool(config.get("watch_enabled")),
+        "interval_seconds": _clean_interval(config.get("check_interval_seconds")),
+        "authenticated": ctx_authed,
+        # Watching only runs while the BankID session lives in server memory.
+        "active": bool(config.get("watch_enabled")) and ctx_authed,
+        "last_run": state.get("last_run"),
+        "last_error": state.get("last_error"),
+        "found": state.get("found"),
+        "min_interval_seconds": WATCH_MIN_INTERVAL_SECONDS,
+        "max_interval_seconds": WATCH_MAX_INTERVAL_SECONDS,
+    }
+
+
+@app.route("/api/watch", methods=["GET", "POST"])
+def api_watch():
+    """Turn server-side background watching on/off for the calling user.
+
+    With this on, the server keeps scanning after the app is closed and the
+    phone is locked. It stops if the server restarts, because the user's
+    Trafikverket session is held in memory only — the app then has to
+    re-authenticate with BankID."""
+    sid = _current_sid()
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        fields = {}
+        if "enabled" in data:
+            fields["watch_enabled"] = bool(data.get("enabled"))
+        if "interval_seconds" in data:
+            fields["check_interval_seconds"] = _clean_interval(data.get("interval_seconds"))
+        if fields:
+            save_user_config(fields, sid)
+        if fields.get("watch_enabled"):
+            ctx = _tv_ctx()  # keep this user's session alive for the watcher
+            if not ctx["auth"].get("authenticated"):
+                return jsonify({**_watch_status(sid, load_config(sid)),
+                                "ok": False, "error": "Not authenticated"}), 401
+    return jsonify(_watch_status(sid, load_config(sid)))
 
 
 @app.route("/api/location_ids")
@@ -2317,7 +2616,7 @@ def known_locations():
 def api_sms_diagnose():
     """Probe 46elks to see what numbers and sender IDs the account has
     available. Useful when sends keep failing with 403."""
-    config = load_config()
+    config = load_server_config()
     user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
     pwd = os.environ.get("SMS_API_PASSWORD") or config.get("sms_api_password", "")
     if not user or not pwd:
@@ -2352,7 +2651,7 @@ def api_sms_diagnose():
 @app.route("/api/sms/test", methods=["POST"])
 def api_sms_test():
     """Send a test SMS to verify 46elks credentials."""
-    config = load_config()
+    config = load_server_config()
     body = request.get_json(silent=True) or {}
     to = (body.get("to") or "").strip() or config.get("sms_to", "")
     user = os.environ.get("SMS_API_USERNAME") or config.get("sms_api_username", "")
@@ -2366,7 +2665,7 @@ def api_sms_test():
 @app.route("/api/ntfy/test", methods=["POST"])
 def api_ntfy_test():
     """Send a test ntfy notification to verify the topic works on Windows."""
-    config = load_config()
+    config = load_server_config()
     body = request.get_json(silent=True) or {}
     topic = (body.get("topic") or config.get("ntfy_topic") or "").strip()
     server = (body.get("server") or config.get("ntfy_server") or "https://ntfy.sh").strip()
@@ -2411,7 +2710,7 @@ def api_sms_relay():
     if not to or not msg:
         return jsonify({"ok": False, "error": "to and message required"}), 400
 
-    cfg = load_config()
+    cfg = load_server_config()
     sms_user = os.environ.get("SMS_API_USERNAME") or cfg.get("sms_api_username", "")
     sms_pass = os.environ.get("SMS_API_PASSWORD") or cfg.get("sms_api_password", "")
     if not sms_user or not sms_pass:
@@ -2451,6 +2750,11 @@ def api_location_details():
             data = json.load(f)
         return jsonify(data.get("locations", []))
     return jsonify([])
+
+
+# Started at import, not under __main__, so it also runs under gunicorn.
+# Set DISABLE_WATCHER=1 to keep it off (tests, one-off scripts).
+start_watcher()
 
 
 if __name__ == "__main__":
