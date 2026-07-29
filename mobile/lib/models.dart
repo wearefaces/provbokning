@@ -49,6 +49,8 @@ class BillingStatus {
   final bool stripeEnabled;
   final String priceLabel;
   final String? paidUntil;
+  final String source; // 'stripe', 'ios_iap', 'android_iap', 'linked', ''
+  final String email;
 
   BillingStatus({
     required this.paid,
@@ -56,6 +58,8 @@ class BillingStatus {
     required this.stripeEnabled,
     required this.priceLabel,
     this.paidUntil,
+    this.source = '',
+    this.email = '',
   });
 
   factory BillingStatus.fromJson(Map<String, dynamic> j) => BillingStatus(
@@ -64,7 +68,72 @@ class BillingStatus {
         stripeEnabled: j['stripe_enabled'] == true,
         priceLabel: (j['price_label'] ?? '').toString(),
         paidUntil: j['paid_until']?.toString(),
+        source: (j['source'] ?? '').toString(),
+        email: (j['email'] ?? '').toString(),
       );
+}
+
+/// Server-side background watching. When [active] the server keeps searching
+/// for slots on the user's behalf with the app closed and the phone locked, so
+/// the search no longer depends on a Dart timer that iOS suspends.
+class WatchStatus {
+  final bool enabled;
+  final bool authenticated;
+  final bool active;
+  final int intervalSeconds;
+  final int minIntervalSeconds;
+  final int maxIntervalSeconds;
+  final String? lastRun;
+  final String? lastError;
+  final int? found;
+
+  WatchStatus({
+    required this.enabled,
+    required this.authenticated,
+    required this.active,
+    required this.intervalSeconds,
+    this.minIntervalSeconds = 60,
+    this.maxIntervalSeconds = 3600,
+    this.lastRun,
+    this.lastError,
+    this.found,
+  });
+
+  factory WatchStatus.fromJson(Map<String, dynamic> j) => WatchStatus(
+        enabled: j['enabled'] == true,
+        authenticated: j['authenticated'] == true,
+        active: j['active'] == true,
+        intervalSeconds: (j['interval_seconds'] as num?)?.toInt() ?? 300,
+        minIntervalSeconds: (j['min_interval_seconds'] as num?)?.toInt() ?? 60,
+        maxIntervalSeconds: (j['max_interval_seconds'] as num?)?.toInt() ?? 3600,
+        lastRun: j['last_run']?.toString(),
+        lastError: j['last_error']?.toString(),
+        found: (j['found'] as num?)?.toInt(),
+      );
+
+  static WatchStatus off() => WatchStatus(
+        enabled: false,
+        authenticated: false,
+        active: false,
+        intervalSeconds: 300,
+      );
+}
+
+class UserProfile {
+  final String email;
+  final String name;
+
+  const UserProfile({this.email = '', this.name = ''});
+
+  factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
+        email: (j['email'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+      );
+
+  Map<String, dynamic> toJson() => {'email': email, 'name': name};
+
+  UserProfile copyWith({String? email, String? name}) =>
+      UserProfile(email: email ?? this.email, name: name ?? this.name);
 }
 
 class ScanResult {
@@ -176,6 +245,37 @@ class LocationDetail {
         name: (j['name'] ?? '').toString(),
         region: (j['region'] ?? '').toString(),
       );
+}
+
+class Reservation {
+  final String id;
+  final Slot slot;
+  final String createdAt; // ISO Z
+  final String expiresAt; // ISO Z
+  final String status; // held | booked | dismissed | expired
+
+  Reservation({
+    required this.id,
+    required this.slot,
+    required this.createdAt,
+    required this.expiresAt,
+    required this.status,
+  });
+
+  factory Reservation.fromJson(Map<String, dynamic> j) => Reservation(
+        id: (j['id'] ?? '').toString(),
+        slot: Slot.fromJson((j['slot'] as Map?)?.cast<String, dynamic>() ?? {}),
+        createdAt: (j['created_at'] ?? '').toString(),
+        expiresAt: (j['expires_at'] ?? '').toString(),
+        status: (j['status'] ?? 'held').toString(),
+      );
+
+  /// Minutes left until the 15-min hold expires. Negative if expired.
+  int minutesLeft() {
+    final exp = DateTime.tryParse(expiresAt)?.toUtc();
+    if (exp == null) return 0;
+    return exp.difference(DateTime.now().toUtc()).inMinutes;
+  }
 }
 
 class ActivityEntry {
