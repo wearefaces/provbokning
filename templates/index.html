@@ -236,7 +236,9 @@ tr:hover td{background:var(--accent-bg)}
 <!-- Status Bar -->
 <div class="status-bar">
   <div class="st-dot off" id="stDot"></div>
-  <div class="st-lbl">Status: <span id="stTxt">Stoppad</span></div>
+  <div class="st-lbl">Status: <span id="stTxt">Stoppad</span>
+    <div id="watchTxt" style="font-size:.78rem;color:var(--text2);margin-top:2px"></div>
+  </div>
   <div class="ctrl">
     <button class="btn btn-go" id="goBtn" onclick="startScanner()" disabled>Starta</button>
     <button class="btn btn-st" id="stBtn" onclick="stopScanner()" disabled>Stoppa</button>
@@ -457,7 +459,7 @@ function initSmsToggle(){
 }
 
 /* ── Init ── */
-(function(){loadLocDetails();loadExistingRes();loadBookedExams();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn()})();
+(function(){loadLocDetails();loadExistingRes();loadBookedExams();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn();loadWatch()})();
 
 /* ── Existing Trafikverket bookings ── */
 function loadBookedExams(){
@@ -721,6 +723,9 @@ async function startScanner(){
   if(!ssn){showT('Fyll i personnummer!',true);return}
   await saveCfg();
   requestNotifPermission();
+  /* Hand the search to the server as well. The loop below only runs while this
+     tab is open; server-side bevakning keeps searching after it is closed. */
+  await setWatch(true);
   running=true;updUI('on');startTmr();totalSearches=0;
 
   while(running){
@@ -788,11 +793,43 @@ async function startScanner(){
   }
   document.getElementById('scanp').classList.remove('on');updUI('off');stopTmr();
 }
-function stopScanner(){running=false}
+function stopScanner(){running=false;setWatch(false)}
+
+/* ── Server-side bevakning ──
+   Keeps searching when this tab is closed. The server holds the BankID session
+   in memory only, so bevakning ends if the server restarts — then the user has
+   to log in again. watchActive reflects what the server reports. */
+var watchActive=false;
+async function setWatch(on){
+  try{
+    var r=await fetch('/api/watch',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({enabled:!!on})});
+    var d=await r.json();
+    watchActive=!!d.active;
+  }catch(e){watchActive=false}
+  updWatchTxt();
+}
+async function loadWatch(){
+  try{
+    var d=await (await fetch('/api/watch')).json();
+    watchActive=!!d.active;
+    /* The server may already be watching from an earlier visit. */
+    if(watchActive&&!running)updUI('on');
+  }catch(e){watchActive=false}
+  updWatchTxt();
+}
+function updWatchTxt(){
+  var el=document.getElementById('watchTxt');
+  if(!el)return;
+  el.textContent=watchActive
+    ? 'Bevakning på servern: söker även när du stängt sidan'
+    : (running?'Söker bara medan den här sidan är öppen':'');
+}
 
 function updUI(st){
   document.getElementById('stDot').className='st-dot '+(st==='on'?'on':'off');
   document.getElementById('stTxt').textContent=st==='on'?'Söker aktivt':'Stoppad';
+  updWatchTxt();
   document.getElementById('goBtn').disabled=st==='on'||!authenticated;document.getElementById('stBtn').disabled=st!=='on';
 }
 
