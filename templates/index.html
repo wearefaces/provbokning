@@ -799,13 +799,19 @@ function stopScanner(){running=false;setWatch(false)}
    Keeps searching when this tab is closed. The server holds the BankID session
    in memory only, so bevakning ends if the server restarts — then the user has
    to log in again. watchActive reflects what the server reports. */
-var watchActive=false;
+var watchActive=false,watchAllowed=true;
 async function setWatch(on){
   try{
     var r=await fetch('/api/watch',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({enabled:!!on})});
     var d=await r.json();
     watchActive=!!d.active;
+    if(typeof d.allowed!=='undefined')watchAllowed=!!d.allowed;
+    /* 402: bevakning i bakgrunden kräver live-läge. */
+    if(r.status===402){
+      watchActive=false;
+      showT(d.message||'Aktivera live-läge för att bevaka i bakgrunden.',true);
+    }
   }catch(e){watchActive=false}
   updWatchTxt();
 }
@@ -813,6 +819,7 @@ async function loadWatch(){
   try{
     var d=await (await fetch('/api/watch')).json();
     watchActive=!!d.active;
+    if(typeof d.allowed!=='undefined')watchAllowed=!!d.allowed;
     /* The server may already be watching from an earlier visit. */
     if(watchActive&&!running)updUI('on');
   }catch(e){watchActive=false}
@@ -823,7 +830,11 @@ function updWatchTxt(){
   if(!el)return;
   el.textContent=watchActive
     ? 'Bevakning på servern: söker även när du stängt sidan'
-    : (running?'Söker bara medan den här sidan är öppen':'');
+    : (running
+        ? (watchAllowed
+            ? 'Söker bara medan den här sidan är öppen'
+            : 'Söker bara medan sidan är öppen – aktivera live-läge för bevakning i bakgrunden')
+        : '');
 }
 
 function updUI(st){

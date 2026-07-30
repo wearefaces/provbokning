@@ -214,6 +214,14 @@ class ApiClient {
       'enabled': enabled,
       if (intervalSeconds != null) 'interval_seconds': intervalSeconds,
     });
+    if (r.statusCode == 402) {
+      // Background watching is behind live-läge; server enforces it.
+      final d = r.data as Map<String, dynamic>? ?? {};
+      throw PaymentRequiredException(
+        d['message']?.toString() ??
+            'Aktivera live-läge för att bevaka i bakgrunden.',
+      );
+    }
     if (r.statusCode == 401) throw ApiException('not_authenticated');
     if (r.data is! Map) return WatchStatus.off();
     return WatchStatus.fromJson(r.data as Map<String, dynamic>);

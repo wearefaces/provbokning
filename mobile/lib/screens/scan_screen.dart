@@ -231,6 +231,17 @@ class ScanScreenState extends State<ScanScreen> {
           .setWatch(enabled: enabled, intervalSeconds: _intervalSeconds);
       if (!mounted) return;
       setState(() => _watch = w);
+    } on PaymentRequiredException catch (e) {
+      // Server rejected it: live-läge required. Roll the toggle back so the UI
+      // doesn't claim auto-sök is on, and show the paywall.
+      if (!mounted) return;
+      setState(() {
+        _autoScan = false;
+        _scanTimer?.cancel();
+      });
+      // ignore: discarded_futures
+      ScanLiveActivity.instance.stop();
+      await _showPaywall(e.message);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message == 'not_authenticated'

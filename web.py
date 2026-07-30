@@ -795,6 +795,24 @@ def is_session_paid() -> bool:
     return False
 
 
+def _sid_is_paid(sid: str) -> bool:
+    """is_session_paid() for an explicit session id, with no request context.
+
+    The background watcher re-checks this on every tick, so a lapsed
+    subscription stops server-side watching without needing the user to visit.
+    """
+    if not stripe_enabled():
+        return True  # free mode while payment is not configured
+    if _entry_is_active(load_paid_sessions().get(sid)):
+        return True
+    email = _user_email(sid)
+    if email:
+        _src_sid, src = _find_paid_entry_by_email(email)
+        if _entry_is_active(src):
+            return True
+    return False
+
+
 def mark_session_paid(sid: str, customer_id: str = "", subscription_id: str = "",
                      days: int = 33, email: str = "", source: str = ""):
     store = load_paid_sessions()
@@ -1528,13 +1546,19 @@ def save_config_route():
         "sms_enabled": data.get("sms_enabled", False),
         "sms_to": data.get("sms_to", "").strip(),
     }
+    # Both of these drive paid behaviour — background watching, and real
+    # Trafikverket reservations made without the user present — so they can only
+    # be switched on by a paying visitor. Otherwise this endpoint would be a way
+    # around the /api/watch paywall.
+    sid = _current_sid()
     for key in ("auto_reserve_enabled", "watch_enabled"):
         if key in data:
-            user_fields[key] = bool(data.get(key))
+            user_fields[key] = bool(data.get(key)) and (
+                _is_demo_reviewer() or _sid_is_paid(sid))
     if "check_interval_seconds" in data:
         user_fields["check_interval_seconds"] = _clean_interval(
             data.get("check_interval_seconds"))
-    save_user_config(user_fields)
+    save_user_config(user_fields, sid)
 
     # Admin-only keys: shared by the whole server, ignored for non-admins
     if _is_admin():
@@ -2042,8 +2066,11 @@ def _run_scan(sid: str, ctx: dict, base_url: str = "") -> dict:
             notified[make_key(t)] = expiry
         save_sms_notified(notified, sid)
 
+    # Auto-reserve makes a real Trafikverket booking with the user absent, so it
+    # is checked here too rather than trusting the stored flag — the flag may
+    # predate a lapsed subscription, or have been set by an admin.
     auto_claim_result = None
-    if added and config.get("auto_reserve_enabled"):
+    if added and config.get("auto_reserve_enabled") and _sid_is_paid(sid):
         auto_claim_result = _auto_reserve(sid, tv_session, added, config)
 
     return {"ok": True, "times": collected, "added": added,
@@ -2079,6 +2106,13 @@ WATCH_TICK_SECONDS = 15
 
 _watcher_started = False
 _watcher_lock = threading.Lock()
+
+
+def _watch_allowed(sid: str) -> bool:
+    """Server-side watching is a paid feature: it keeps searching (and can
+    auto-reserve) while the user's phone is closed. App Store reviewers get in
+    so they can exercise the flow. Callable only inside a request."""
+    return _is_demo_reviewer() or _sid_is_paid(sid)
 
 
 def _watch_state(sid: str) -> dict:
@@ -2134,6 +2168,16 @@ def _watch_loop() -> None:
                     config = load_config(sid)
                     if not config.get("watch_enabled"):
                         continue
+                    # Re-checked every tick so a lapsed subscription stops
+                    # watching on its own. Only skipped, never persisted as
+                    # disabled: a transient failure reading paid_sessions.json
+                    # must not switch the user's watching off for good.
+                    if not _sid_is_paid(sid):
+                        update_user_state(sid, "watch", {
+                            **_watch_state(sid),
+                            "last_error": "live_required",
+                        })
+                        continue
                     if not _watch_due(sid, config, now):
                         continue
                     # Watching counts as activity, so an idle-but-watching user
@@ -2179,6 +2223,8 @@ def _watch_status(sid: str, config: dict) -> dict:
         "found": state.get("found"),
         "min_interval_seconds": WATCH_MIN_INTERVAL_SECONDS,
         "max_interval_seconds": WATCH_MAX_INTERVAL_SECONDS,
+        # False when the visitor needs live-läge before watching can be enabled.
+        "allowed": _watch_allowed(sid),
     }
 
 
@@ -2193,6 +2239,14 @@ def api_watch():
     sid = _current_sid()
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
+        # Payment is checked BEFORE anything is persisted. Saving first would
+        # leave watch_enabled=true behind on a rejected request, and the watcher
+        # would then start for free the moment the user passed BankID.
+        if bool(data.get("enabled")) and not _watch_allowed(sid):
+            return jsonify({**_watch_status(sid, load_config(sid)),
+                            "ok": False, "error": "live_required",
+                            "message": "Aktivera live-läge för att bevaka i "
+                                       "bakgrunden."}), 402
         fields = {}
         if "enabled" in data:
             fields["watch_enabled"] = bool(data.get("enabled"))
