@@ -292,8 +292,8 @@ tr:hover td{background:var(--accent-bg)}
       </div>
     </div>
     <div class="card-row" style="margin-bottom:16px">
-      <div class="field"><label>Från datum</label><input type="date" id="dtFrom" value="{{ config.date_from }}"></div>
-      <div class="field"><label>Till datum</label><input type="date" id="dtTo" value="{{ config.date_to }}"></div>
+      <div class="field"><label>Från datum <span class="lockBadge" style="display:none;font-weight:600;color:var(--accent)" title="Kräver live-läge">🔒 live</span></label><input type="date" id="dtFrom" value="{{ config.date_from }}"></div>
+      <div class="field"><label>Till datum <span class="lockBadge" style="display:none;font-weight:600;color:var(--accent)" title="Kräver live-läge">🔒 live</span></label><input type="date" id="dtTo" value="{{ config.date_to }}"></div>
     </div>
 
     <!-- SMS Notifications (user picks own number; admin sets API creds in /admin) -->
@@ -327,14 +327,34 @@ tr:hover td{background:var(--accent-bg)}
     </div>
 
     <!-- Location Browser -->
-    <h3>Välj orter <span style="font-weight:400;color:var(--text3);text-transform:none;font-size:.8rem">(lämna tomt = alla)</span></h3>
-    <div class="loc-browser">
+    <h3>Välj orter <span style="font-weight:400;color:var(--text3);text-transform:none;font-size:.8rem">(lämna tomt = alla)</span>
+      <span class="lockBadge" style="display:none;font-weight:600;color:var(--accent);text-transform:none;font-size:.8rem" title="Kräver live-läge">🔒 live</span>
+    </h3>
+    <div class="loc-browser" id="locCard">
       <div class="loc-search">
         <span class="icon" style="color:var(--text3)">&#128269;</span>
         <input type="text" id="locQ" placeholder="Sök ort..." oninput="filterLocBrowser()">
       </div>
       <div class="loc-selected-bar" id="selBar"></div>
       <div id="locBrowser"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Locked results (demo). Real counts from a real scan, no bookable detail. -->
+<div id="lockSec" style="display:none;margin-bottom:16px">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)">
+    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <div id="lockTotal" style="font-size:2.1rem;font-weight:800;color:var(--accent);line-height:1">0</div>
+      <div style="font-weight:700;color:var(--text)">lediga tider hittade just nu</div>
+    </div>
+    <div id="lockSub" style="font-size:.84rem;color:var(--text2);margin-top:4px"></div>
+    <div id="lockRows" style="margin:14px 0 4px"></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <button onclick="startCheckout()" style="background:var(--accent);color:#fff;border:0;border-radius:999px;padding:11px 20px;font:inherit;font-weight:700;font-size:.9rem;cursor:pointer">
+        Aktivera live-läge <span id="lockPrice"></span>
+      </button>
+      <div style="font-size:.82rem;color:var(--text2)">Se datum och tid, välj egna platser, boka och få SMS när tider dyker upp.</div>
     </div>
   </div>
 </div>
@@ -374,6 +394,8 @@ var EIDS={'Körprov':12,'Kunskapsprov':3};
 var LICENCE_PARAMS={'B':{lid:5,vid:2,eids:{'Körprov':12,'Kunskapsprov':3}},'A':{lid:4,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'A1':{lid:2,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'A2':{lid:24,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}}};
 var allTimes=[],addedTimes=[];
 var selLocs={{ config.locations | tojson }};
+/* Demo vs live-läge: set from /api/config by loadLockState(). */
+var paidUnlocked=true,FREE_SCAN_INTERVAL=600;
 var locDetails=[];
 var locTimeCounts={};
 var running=false,totalSearches=0,startTm=null,tmrI=null,activeRes=null;
@@ -459,7 +481,24 @@ function initSmsToggle(){
 }
 
 /* ── Init ── */
-(function(){loadLocDetails();loadExistingRes();loadBookedExams();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn();loadWatch()})();
+(function(){loadLocDetails();loadExistingRes();loadBookedExams();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn();loadWatch();loadLockState()})();
+
+/* Ask the server which controls this visitor may use. The server enforces the
+   same list on /save_config, so this only drives the lock badges. */
+function loadLockState(){
+  return fetch('/api/config').then(function(r){return r.json()}).then(function(d){
+    paidUnlocked = d.paid !== false;
+    if(d.free_scan_interval_seconds)FREE_SCAN_INTERVAL=d.free_scan_interval_seconds;
+    /* In demo the server pins the search to its own orter/datum — show those,
+       so the page can't promise a search it will not run. */
+    if(!paidUnlocked){
+      if(Array.isArray(d.locations)){selLocs=d.locations.slice();renderLocBrowser();renderSelBar()}
+      if(d.date_from)document.getElementById('dtFrom').value=d.date_from;
+      if(d.date_to)document.getElementById('dtTo').value=d.date_to;
+    }
+    applyLocks();
+  }).catch(function(){});
+}
 
 /* ── Existing Trafikverket bookings ── */
 function loadBookedExams(){
@@ -541,10 +580,14 @@ function loadBilling(){
         s.textContent='Betalning är ännu inte aktiverad – appen körs i fri demo.';
         btn.style.display='none';
       } else {
-        s.textContent='Du kan utforska appen och söka tider. Aktivera live-läge för att boka och få automatiska notiser.';
+        s.textContent='I demoläget ser du hur många lediga tider som finns – aktivera live-läge för datum, tid, egna orter, bokning och SMS.';
         price.textContent='– '+(d.price_label||'99 kr/mån');
       }
     }
+    /* Paid state decides which controls are usable, so refresh the locks
+       whenever it changes (including right after a successful checkout). */
+    paidUnlocked = !!d.paid || !d.stripe_enabled;
+    applyLocks();
   }).catch(function(){});
 }
 function startCheckout(){
@@ -690,8 +733,8 @@ function renderSelBar(){
     return '<span class="loc-tag">'+esc(l)+'<span class="x" onclick="event.stopPropagation();rmLoc(\''+esc(l).replace(/'/g,"\\'")+'\')">&times;</span></span>';
   }).join('');
 }
-function togLoc(nm){var i=selLocs.indexOf(nm);if(i>=0)selLocs.splice(i,1);else selLocs.push(nm);renderLocBrowser();renderSelBar()}
-function rmLoc(nm){selLocs=selLocs.filter(function(l){return l!==nm});renderLocBrowser();renderSelBar()}
+function togLoc(nm){if(!paidUnlocked){lockMsg();return}var i=selLocs.indexOf(nm);if(i>=0)selLocs.splice(i,1);else selLocs.push(nm);renderLocBrowser();renderSelBar()}
+function rmLoc(nm){if(!paidUnlocked){lockMsg();return}selLocs=selLocs.filter(function(l){return l!==nm});renderLocBrowser();renderSelBar()}
 
 /* ── Settings toggle ── */
 function togSett(){document.getElementById('sBody').classList.toggle('open');document.getElementById('sArr').classList.toggle('open')}
@@ -752,6 +795,18 @@ async function startScanner(){
 
       totalSearches++;document.getElementById('scCnt').textContent=totalSearches+' sökningar';
 
+      /* Demo: the server ran a real scan but returned counts only. Show what was
+         found and what live-läge unlocks, then wait out the free-scan throttle
+         instead of hammering an endpoint that will just return the cache. */
+      if(data.locked){
+        renderLocked(data);
+        if(!running)break;
+        var wait=(data.retry_after_seconds||FREE_SCAN_INTERVAL||600)*1000;
+        document.getElementById('scLbl').textContent='Nästa sökning om '+Math.ceil(wait/60000)+' min';
+        await sleep(wait+1000);continue;
+      }
+      document.getElementById('lockSec').style.display='none';
+
       var collected=data.times||[];
       addedTimes=data.added||[];
       allTimes=collected;
@@ -794,6 +849,65 @@ async function startScanner(){
   document.getElementById('scanp').classList.remove('on');updUI('off');stopTmr();
 }
 function stopScanner(){running=false;setWatch(false)}
+
+/* ── Demo (locked) view ──
+   The scan was real; the server stripped every date, time and occasion id. We
+   show the counts so the user can see the service works, and what paying adds. */
+function renderLocked(data){
+  var s=data.summary||{};
+  document.getElementById('resSec').style.display='none';
+  document.getElementById('lockSec').style.display='';
+  document.getElementById('lockTotal').textContent=s.total||0;
+  var bits=[];
+  if(s.locations_scanned)bits.push(s.locations_scanned+' orter');
+  if(s.window_days)bits.push('närmaste '+s.window_days+' dagarna');
+  var sub=bits.length?('Demoläge: sökt '+bits.join(', ')+'.'):'Demoläge.';
+  if(typeof s.earliest_in_days==='number'){
+    sub+=' Tidigaste tiden är om ca '+s.earliest_in_days+' dagar.';
+  }
+  document.getElementById('lockSub').textContent=sub;
+  var rows=(s.by_location||[]);
+  document.getElementById('lockRows').innerHTML=rows.length
+    ? rows.map(function(r){
+        return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'
+          +'<div style="flex:1;font-weight:600;color:var(--text)">'+esc(r.location)+'</div>'
+          +'<div style="color:var(--text2);font-size:.86rem">'+r.count+(r.count===1?' tid':' tider')+'</div>'
+          +'<div style="font-family:monospace;color:var(--text2);letter-spacing:2px;font-size:.9rem" title="Aktivera live-läge för att se datum och tid">•••• ••:••</div>'
+          +'</div>';
+      }).join('')
+    : '<div class="empty">Inga lediga tider i demoläget just nu. Med live-läge söker du dina egna orter och datum.</div>';
+  var p=document.getElementById('lockPrice');
+  var bp=document.getElementById('billingPrice');
+  if(p&&bp)p.textContent=bp.textContent||'';
+}
+
+/* ── Locked controls (demo) ──
+   The server drops these fields for unpaid callers, so this is presentation
+   only — it exists so the user sees what live-läge unlocks instead of silently
+   losing their input. (paidUnlocked / FREE_SCAN_INTERVAL are declared with the
+   rest of the state, so a later `var` can't reset what loadLockState found.) */
+function lockMsg(){
+  showT('Aktivera live-läge för att välja egna orter och datum.',true);
+}
+function applyLocks(){
+  var ids=['dtFrom','dtTo'];
+  ids.forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    el.disabled=!paidUnlocked;
+    el.style.opacity=paidUnlocked?'':'0.55';
+    el.style.cursor=paidUnlocked?'':'not-allowed';
+    el.title=paidUnlocked?'':'Aktivera live-läge för att välja datum';
+  });
+  document.querySelectorAll('.lockBadge').forEach(function(b){
+    b.style.display=paidUnlocked?'none':'';
+  });
+  var lc=document.getElementById('locCard');
+  if(lc){
+    lc.style.opacity=paidUnlocked?'':'0.75';
+    lc.title=paidUnlocked?'':'Aktivera live-läge för att välja orter';
+  }
+}
 
 /* ── Server-side bevakning ──
    Keeps searching when this tab is closed. The server holds the BankID session

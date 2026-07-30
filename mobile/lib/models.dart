@@ -136,12 +136,58 @@ class UserProfile {
       UserProfile(email: email ?? this.email, name: name ?? this.name);
 }
 
+/// Counts-only result of a demo (unpaid) scan. The scan was real, but the server
+/// strips every date, time and occasion id — see _mask_slots server-side.
+class ScanSummary {
+  final int total;
+  final List<({String location, int count})> byLocation;
+  final int? earliestInDays;
+  final int locationsScanned;
+  final int windowDays;
+
+  ScanSummary({
+    required this.total,
+    required this.byLocation,
+    this.earliestInDays,
+    this.locationsScanned = 0,
+    this.windowDays = 0,
+  });
+
+  factory ScanSummary.fromJson(Map<String, dynamic> j) => ScanSummary(
+        total: (j['total'] as num?)?.toInt() ?? 0,
+        byLocation: (j['by_location'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map((e) => (
+                  location: (e['location'] ?? '').toString(),
+                  count: (e['count'] as num?)?.toInt() ?? 0,
+                ))
+            .toList(),
+        earliestInDays: (j['earliest_in_days'] as num?)?.toInt(),
+        locationsScanned: (j['locations_scanned'] as num?)?.toInt() ?? 0,
+        windowDays: (j['window_days'] as num?)?.toInt() ?? 0,
+      );
+}
+
 class ScanResult {
   final List<Slot> times;
   final List<Slot> added;
   final List<Slot> removed;
 
-  ScanResult({required this.times, required this.added, required this.removed});
+  /// True when the server returned counts only because the user is in demo.
+  final bool locked;
+  final ScanSummary? summary;
+
+  /// Set when a demo scan was rate-limited and reused the previous counts.
+  final int? retryAfterSeconds;
+
+  ScanResult({
+    required this.times,
+    required this.added,
+    required this.removed,
+    this.locked = false,
+    this.summary,
+    this.retryAfterSeconds,
+  });
 
   factory ScanResult.fromJson(Map<String, dynamic> j) {
     List<Slot> parse(dynamic l) => (l as List? ?? const [])
@@ -151,6 +197,11 @@ class ScanResult {
       times: parse(j['times']),
       added: parse(j['added']),
       removed: parse(j['removed']),
+      locked: j['locked'] == true,
+      summary: j['summary'] is Map<String, dynamic>
+          ? ScanSummary.fromJson(j['summary'] as Map<String, dynamic>)
+          : null,
+      retryAfterSeconds: (j['retry_after_seconds'] as num?)?.toInt(),
     );
   }
 }

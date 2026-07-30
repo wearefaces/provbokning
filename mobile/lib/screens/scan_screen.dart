@@ -45,6 +45,10 @@ class ScanScreenState extends State<ScanScreen> {
   AppConfigData? _config;
   WatchStatus? _watch;
 
+  /// Non-null while the last scan came back locked (demo): counts only, no
+  /// bookable detail. Cleared as soon as a paid scan returns real slots.
+  ScanSummary? _lockedSummary;
+
   @override
   void initState() {
     super.initState();
@@ -138,10 +142,28 @@ class ScanScreenState extends State<ScanScreen> {
       setState(() {
         _times = r.times;
         _added = r.added;
+        _lockedSummary = r.locked ? r.summary : null;
         _scanning = false;
         _lastScan = DateTime.now();
         _scansToday += 1;
       });
+      if (r.locked) {
+        // Demo scans are rate-limited server-side, so don't keep a fast timer
+        // hitting an endpoint that will only replay the cached counts.
+        final wait = r.retryAfterSeconds;
+        if (wait != null && wait > _intervalSeconds) {
+          _scanTimer?.cancel();
+          _scanTimer = Timer(Duration(seconds: wait + 1), () {
+            if (!mounted) return;
+            _scanOnce();
+            if (_autoScan) {
+              _scanTimer = Timer.periodic(
+                  Duration(seconds: _intervalSeconds), (_) => _scanOnce());
+            }
+          });
+        }
+        return;
+      }
       // Fire a local notification banner when this scan tick uncovered new
       // slots. Works whenever the Flutter timer ticks (foreground or while
       // iOS keeps the background timer alive).
@@ -606,11 +628,21 @@ class ScanScreenState extends State<ScanScreen> {
             const SizedBox(height: 22),
             _LedigaTiderHeader(
               title: 'Lediga tider',
-              count: _times.length,
+              count: _lockedSummary?.total ?? _times.length,
               trailing: _autoScan ? 'Auto-sök på' : null,
             ),
             const SizedBox(height: 10),
-            if (_times.isEmpty)
+            // Demo: the scan was real but the server returned counts only, so
+            // show what was found and what live-läge unlocks.
+            if (_lockedSummary != null)
+              _LockedResults(
+                summary: _lockedSummary!,
+                priceLabel: _billing?.priceLabel ?? '',
+                onUpgrade: () => _showPaywall(
+                    'Aktivera live-läge för att se datum och tid, välja egna '
+                    'orter och boka.'),
+              )
+            else if (_times.isEmpty)
               BrandCard(
                 padding: const EdgeInsets.all(28),
                 child: Column(children: const [
@@ -2058,6 +2090,127 @@ class _RowDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Container(height: 1, color: Colors.white.withOpacity(0.05));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo results. The scan hit live Trafikverket data, but the server returned
+// counts only — no date, time or occasion id. Showing the real totals is what
+// makes live-läge worth buying; masked rows make clear what is being withheld.
+// ─────────────────────────────────────────────────────────────────────────────
+class _LockedResults extends StatelessWidget {
+  final ScanSummary summary;
+  final String priceLabel;
+  final VoidCallback onUpgrade;
+
+  const _LockedResults({
+    required this.summary,
+    required this.priceLabel,
+    required this.onUpgrade,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = summary.byLocation;
+    return BrandCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${summary.total}',
+                style: const TextStyle(
+                  color: BrandPalette.lime,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 3),
+                child: Text('lediga tider hittade',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _subtitle(),
+            style: const TextStyle(
+                color: BrandPalette.textSecondary, fontSize: 12.5, height: 1.3),
+          ),
+          if (rows.isEmpty) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Inga lediga tider i demoläget just nu. Med live-läge söker du '
+              'dina egna orter och datum.',
+              style: TextStyle(
+                  color: BrandPalette.textSecondary, fontSize: 12.5, height: 1.3),
+            ),
+          ] else ...[
+            const SizedBox(height: 14),
+            for (int i = 0; i < rows.length; i++) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(rows[i].location,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                    Text(
+                      '${rows[i].count}${rows[i].count == 1 ? ' tid' : ' tider'}',
+                      style: const TextStyle(
+                          color: BrandPalette.textSecondary, fontSize: 12.5),
+                    ),
+                    const SizedBox(width: 12),
+                    const Row(children: [
+                      Icon(Icons.lock_outline_rounded,
+                          size: 14, color: BrandPalette.textMuted),
+                      SizedBox(width: 4),
+                      Text('••:••',
+                          style: TextStyle(
+                              color: BrandPalette.textMuted,
+                              fontFeatures: [FontFeature.tabularFigures()])),
+                    ]),
+                  ],
+                ),
+              ),
+              if (i != rows.length - 1) const _RowDivider(),
+            ],
+          ],
+          const SizedBox(height: 16),
+          BrandCTA(
+            label: priceLabel.isEmpty
+                ? 'Aktivera live-läge'
+                : 'Aktivera live-läge – $priceLabel',
+            icon: Icons.lock_open_rounded,
+            onPressed: onUpgrade,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _subtitle() {
+    final parts = <String>[];
+    if (summary.locationsScanned > 0) {
+      parts.add('${summary.locationsScanned} orter');
+    }
+    if (summary.windowDays > 0) {
+      parts.add('närmaste ${summary.windowDays} dagarna');
+    }
+    var s = parts.isEmpty ? 'Demoläge.' : 'Demoläge: sökt ${parts.join(', ')}.';
+    final d = summary.earliestInDays;
+    if (d != null) s += ' Tidigaste tiden om ca $d dagar.';
+    return s;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

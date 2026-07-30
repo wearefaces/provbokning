@@ -344,6 +344,26 @@ SERVER_CONFIG_FIELDS = (
 WATCH_MIN_INTERVAL_SECONDS = 60
 WATCH_MAX_INTERVAL_SECONDS = 3600
 
+# ── Demo (unpaid) limits ──
+# An unpaid visitor gets a real scan against live Trafikverket data, but only
+# the COUNT of what was found — never a date, time or occasion id. That shows
+# the service genuinely works without giving away the bookable times.
+#
+# Each scan is one Trafikverket request per location, so unpaid traffic is
+# throttled and pinned to a small fixed set of locations. Otherwise free users
+# could get the server's IP rate-limited, which would hurt paying customers.
+FREE_SCAN_MIN_INTERVAL_SECONDS = 600   # one real scan per 10 min
+FREE_SCAN_WINDOW_DAYS = 90             # fixed date range, not user-chosen
+FREE_SCAN_LOCATIONS = ["Stockholm City", "Uppsala", "Göteborg Hisingen", "Malmö"]
+
+# Config fields an unpaid visitor may not set. Their personnummer is still
+# theirs to enter — without it no scan can run at all.
+PAID_ONLY_CONFIG_FIELDS = (
+    "locations", "date_from", "date_to",
+    "check_interval_seconds", "watch_enabled", "auto_reserve_enabled",
+    "sms_enabled", "sms_to",
+)
+
 _user_state_lock = threading.Lock()
 
 
@@ -1546,18 +1566,21 @@ def save_config_route():
         "sms_enabled": data.get("sms_enabled", False),
         "sms_to": data.get("sms_to", "").strip(),
     }
-    # Both of these drive paid behaviour — background watching, and real
-    # Trafikverket reservations made without the user present — so they can only
-    # be switched on by a paying visitor. Otherwise this endpoint would be a way
-    # around the /api/watch paywall.
-    sid = _current_sid()
-    for key in ("auto_reserve_enabled", "watch_enabled"):
-        if key in data:
-            user_fields[key] = bool(data.get(key)) and (
-                _is_demo_reviewer() or _sid_is_paid(sid))
     if "check_interval_seconds" in data:
         user_fields["check_interval_seconds"] = _clean_interval(
             data.get("check_interval_seconds"))
+    for key in ("auto_reserve_enabled", "watch_enabled"):
+        if key in data:
+            user_fields[key] = bool(data.get(key))
+
+    # Choosing locations, date range, scan interval, notifications, background
+    # watching and auto-reserve are all live-läge features. Dropping them here
+    # (rather than trusting the client to hide the controls) is what makes the
+    # lock real — otherwise this endpoint is a way around every other gate.
+    sid = _current_sid()
+    if not (_is_demo_reviewer() or _sid_is_paid(sid)):
+        for key in PAID_ONLY_CONFIG_FIELDS:
+            user_fields.pop(key, None)
     save_user_config(user_fields, sid)
 
     # Admin-only keys: shared by the whole server, ignored for non-admins
@@ -1855,6 +1878,45 @@ def _scan_targets(config: dict) -> tuple[list[int], dict]:
     return (scan_ids or all_ids), params
 
 
+def _free_scan_config(config: dict) -> dict:
+    """Force an unpaid visitor's scan onto the fixed demo locations and date
+    window, whatever their stored config says. Applied at scan time as well as
+    on save, so a config left over from a lapsed subscription can't widen it."""
+    today = datetime.now(timezone.utc).date()
+    return {
+        **config,
+        "locations": list(FREE_SCAN_LOCATIONS),
+        "date_from": today.isoformat(),
+        "date_to": (today + timedelta(days=FREE_SCAN_WINDOW_DAYS)).isoformat(),
+    }
+
+
+def _mask_slots(slots: list[dict]) -> dict:
+    """Aggregate a slot list into counts only — no date, time or occasion id.
+
+    This is what an unpaid visitor gets back: enough to prove real times were
+    found, with nothing they could act on without paying."""
+    by_location: dict[str, int] = {}
+    for t in slots:
+        name = t.get("location") or "—"
+        by_location[name] = by_location.get(name, 0) + 1
+    earliest = min((t.get("date", "") for t in slots if t.get("date")), default="")
+    return {
+        "total": len(slots),
+        "by_location": [{"location": n, "count": c} for n, c in
+                        sorted(by_location.items(), key=lambda kv: (-kv[1], kv[0]))],
+        # Coarse hint only: how far out the first hit is, in whole days. Never
+        # the actual date.
+        "earliest_in_days": (
+            (datetime.fromisoformat(earliest).date()
+             - datetime.now(timezone.utc).date()).days
+            if earliest else None
+        ),
+        "locations_scanned": len(FREE_SCAN_LOCATIONS),
+        "window_days": FREE_SCAN_WINDOW_DAYS,
+    }
+
+
 def _slots_message(slots: list[dict]) -> str:
     """Swedish SMS/push body listing up to 5 slots."""
     dn = ["sön", "mån", "tis", "ons", "tor", "fre", "lör"]
@@ -2002,18 +2064,29 @@ def _auto_reserve(sid: str, tv_session: "http_requests.Session",
     return {"slot": earliest, "result": body, "http_status": status}
 
 
-def _run_scan(sid: str, ctx: dict, base_url: str = "") -> dict:
+def _run_scan(sid: str, ctx: dict, base_url: str = "",
+              paid: bool | None = None) -> dict:
     """One full scan for a single user: fetch every selected location, diff
     against that user's own snapshot, notify them, optionally auto-reserve.
 
     Everything is keyed by the passed sid and takes the session explicitly, so
     this runs identically from an /api/scan request and from the background
-    watcher thread, where there is no request context at all."""
+    watcher thread, where there is no request context at all.
+
+    When the user is not paid the scan still runs against live Trafikverket
+    data, but on the fixed demo locations/window, and returns counts only —
+    see _mask_slots. Pass `paid` to skip the lookup when the caller already
+    knows (the watcher checks it to decide whether to run at all)."""
     tv_session = ctx["session"]
+    if paid is None:
+        paid = _sid_is_paid(sid)
     config = load_config(sid)
+    if not paid:
+        config = _free_scan_config(config)
     scan_ids, params = _scan_targets(config)
     if not scan_ids:
-        return {"ok": True, "times": [], "added": [], "removed": []}
+        return {"ok": True, "locked": not paid, "times": [], "added": [],
+                "removed": [], "summary": _mask_slots([]) if not paid else None}
 
     app.logger.info("Scanning location IDs: %s (licence=%s, exam=%s/%s)",
                      scan_ids, params["licence_type"], params["exam_type"],
@@ -2044,6 +2117,15 @@ def _run_scan(sid: str, ctx: dict, base_url: str = "") -> dict:
 
     collected.sort(key=lambda t: t["date"] + t["time"])
 
+    # An unpaid scan stops here: counts only, and none of the paid side effects.
+    # The snapshot is deliberately NOT saved — otherwise everything found while
+    # unpaid would already be "seen", and the user's first scan after paying
+    # would report no new slots and send no notification.
+    if not paid:
+        return {"ok": True, "locked": True, "times": [], "added": [],
+                "removed": [], "auto_claim": None,
+                "summary": _mask_slots(collected)}
+
     # Changes vs this user's previous snapshot
     previous = load_snapshot(sid)
     current_keys = {make_key(t): t for t in collected}
@@ -2070,25 +2152,69 @@ def _run_scan(sid: str, ctx: dict, base_url: str = "") -> dict:
     # is checked here too rather than trusting the stored flag — the flag may
     # predate a lapsed subscription, or have been set by an admin.
     auto_claim_result = None
-    if added and config.get("auto_reserve_enabled") and _sid_is_paid(sid):
+    if added and config.get("auto_reserve_enabled"):
         auto_claim_result = _auto_reserve(sid, tv_session, added, config)
 
-    return {"ok": True, "times": collected, "added": added,
+    return {"ok": True, "locked": False, "times": collected, "added": added,
             "removed": removed, "auto_claim": auto_claim_result}
+
+
+def _free_scan_throttled(sid: str) -> dict | None:
+    """For unpaid visitors, return the previous summary if their last real scan
+    was under FREE_SCAN_MIN_INTERVAL_SECONDS ago, else None to allow a scan.
+
+    Each scan costs one Trafikverket request per location, so free traffic is
+    rate-limited: without this, unpaid users could get the server's IP throttled
+    and break the service for paying customers."""
+    state = load_user_state(sid).get("free_scan") or {}
+    at = state.get("at")
+    if not at:
+        return None
+    try:
+        last = datetime.fromisoformat(at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    age = (datetime.now(timezone.utc) - last).total_seconds()
+    if age >= FREE_SCAN_MIN_INTERVAL_SECONDS:
+        return None
+    return {
+        "ok": True, "locked": True, "times": [], "added": [], "removed": [],
+        "auto_claim": None,
+        "summary": state.get("summary") or _mask_slots([]),
+        "throttled": True,
+        "retry_after_seconds": int(FREE_SCAN_MIN_INTERVAL_SECONDS - age),
+    }
 
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
-    """Run a full scan of all configured locations. Returns times + changes."""
+    """Run a full scan of all configured locations. Returns times + changes.
+
+    Unpaid visitors get real counts with every date, time and occasion id
+    stripped, on fixed demo locations, rate-limited — see _run_scan."""
     if _is_demo_reviewer():
+        # App Store review needs to see the full flow, so reviewers get sample
+        # slots in full rather than the locked demo view.
         slots = _demo_slots()
-        return jsonify({"ok": True, "times": slots, "added": slots,
-                        "removed": [], "auto_claim": None})
+        return jsonify({"ok": True, "locked": False, "times": slots,
+                        "added": slots, "removed": [], "auto_claim": None})
     ctx = _tv_ctx()
     if not ctx["auth"]["authenticated"]:
         return jsonify({"ok": False, "error": "Not authenticated"}), 401
+    sid = _current_sid()
+    paid = _sid_is_paid(sid)
+    if not paid:
+        cached = _free_scan_throttled(sid)
+        if cached is not None:
+            return jsonify(cached)
     base_url = request.host_url.rstrip("/") if has_request_context() else ""
-    return jsonify(_run_scan(_current_sid(), ctx, base_url))
+    result = _run_scan(sid, ctx, base_url, paid=paid)
+    if not paid:
+        update_user_state(sid, "free_scan", {
+            "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "summary": result.get("summary"),
+        })
+    return jsonify(result)
 
 
 # ── Server-side background watching ──
@@ -2784,7 +2910,13 @@ def api_sms_relay():
 @app.route("/api/config", methods=["GET"])
 def api_config_get():
     """Return user-facing config fields (no admin secrets) for the mobile client."""
-    cfg = load_config()
+    sid = _current_sid()
+    cfg = load_config(sid)
+    unlocked = _is_demo_reviewer() or _sid_is_paid(sid)
+    if not unlocked:
+        # Show the demo limits that a scan would actually use, so the client
+        # renders the same locations/window the server will search.
+        cfg = _free_scan_config(cfg)
     public_keys = (
         "swedish_ssn", "licence_type", "exam_type", "locations",
         "date_from", "date_to", "sms_enabled", "sms_to",
@@ -2793,6 +2925,11 @@ def api_config_get():
     out["sms_enabled"] = bool(out.get("sms_enabled"))
     if not isinstance(out.get("locations"), list):
         out["locations"] = []
+    # Which controls the client should render with a lock badge. The server
+    # enforces this list regardless of what the client does with it.
+    out["locked_fields"] = [] if unlocked else list(PAID_ONLY_CONFIG_FIELDS)
+    out["paid"] = unlocked
+    out["free_scan_interval_seconds"] = FREE_SCAN_MIN_INTERVAL_SECONDS
     return jsonify(out)
 
 
