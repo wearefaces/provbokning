@@ -1,4 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-label="BankID">
-  <rect width="640" height="260" rx="40" fill="#193E4F"/>
-  <text x="320" y="172" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="128" font-weight="700" fill="#FFFFFF" letter-spacing="-4">BankID</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 520" role="img" aria-label="BankID">
+  <g fill="#1B3A4B">
+    <!-- Mark: stylized "iD" puzzle piece -->
+    <!-- Left head -->
+    <path d="M243 150c-27 0-33-14-30-27 3-13 15-23 30-23s24 10 21 23c-3 13-14 27-21 27z"/>
+    <!-- Left body -->
+    <path d="M226 165h55l-30 175h-55z"/>
+    <!-- Right head -->
+    <path d="M321 150c-27 0-33-14-30-27 3-13 15-23 30-23s24 10 21 23c-3 13-14 27-21 27z"/>
+    <!-- Right "D" body with counter -->
+    <path fill-rule="evenodd" d="M300 165h72c58 0 92 40 82 92s-58 83-116 83h-70l31-175zm40 45-16 90h24c30 0 52-20 57-45s-9-45-39-45h-26z"/>
+  </g>
+  <text x="320" y="470" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="118" font-weight="800" font-style="italic" fill="#1B3A4B" letter-spacing="-4">BankID</text>
 </svg>
