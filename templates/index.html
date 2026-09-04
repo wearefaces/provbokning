@@ -207,7 +207,7 @@ tr:hover td{background:var(--accent-bg)}
 <!-- BankID Login Overlay -->
 <div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(12px)">
   <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:40px;max-width:380px;width:90%;text-align:center;box-shadow:var(--shadow-lg)">
-    <img src="{{ url_for('static', filename='bankid-logo.svg') }}?v=2" alt="BankID" style="height:44px;margin-bottom:12px">
+    <img src="{{ url_for('static', filename='bankid-logo.png') }}?v=1" onerror="this.onerror=null;this.src='{{ url_for('static', filename='bankid-logo.svg') }}?v=2'" alt="BankID" style="height:44px;margin-bottom:12px">
     <h2 style="color:var(--text);margin-bottom:8px;font-size:1.2rem;font-weight:700">Logga in med BankID</h2>
     <p style="color:var(--text3);font-size:.85rem;margin-bottom:20px">Du behöver logga in med BankID för att söka lediga provtider hos Trafikverket.</p>
     <div id="qrArea" style="display:flex;justify-content:center;margin-bottom:16px;min-height:40px"></div>
