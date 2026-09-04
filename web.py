@@ -218,6 +218,10 @@ LICENCE_PARAMS = {
     "A": {"licence_id": 4, "vehicle_type_id": 1, "exam_ids": {"Körprov": 10, "Kunskapsprov": 2}},
     "A1": {"licence_id": 2, "vehicle_type_id": 1, "exam_ids": {"Körprov": 10, "Kunskapsprov": 2}},
     "A2": {"licence_id": 24, "vehicle_type_id": 1, "exam_ids": {"Körprov": 10, "Kunskapsprov": 2}},
+    # Moped klass I (AM) — knowledge test only (no körprov).
+    # NOTE: these Trafikverket IDs are unverified; confirm against a logged-in
+    # occasion-bundles response and correct if scans return no moped slots.
+    "AM": {"licence_id": 1, "vehicle_type_id": 3, "exam_ids": {"Kunskapsprov": 3}},
 }
 
 # ── Trafikverket session state (per browser / Flask session) ──
@@ -1835,6 +1839,9 @@ def _scan_targets(config: dict) -> tuple[list[int], dict]:
     the licence/exam parameters the occasion query needs."""
     exam_type = config.get("exam_type", "Körprov")
     licence_type = config.get("licence_type", "B")
+    # Moped (AM) only has a knowledge test.
+    if licence_type == "AM":
+        exam_type = "Kunskapsprov"
     lp = LICENCE_PARAMS.get(licence_type, LICENCE_PARAMS["B"])
     params = {
         "ssn": config.get("swedish_ssn", ""),
@@ -1849,6 +1856,10 @@ def _scan_targets(config: dict) -> tuple[list[int], dict]:
 
     all_loc_data = load_location_ids()
     licence_locs = all_loc_data.get(licence_type, all_loc_data)
+    # Moped theory runs at the same test centres as the B knowledge test, so
+    # reuse that list until a moped-specific one is captured.
+    if licence_type == "AM" and "AM" not in all_loc_data:
+        licence_locs = all_loc_data.get("B", all_loc_data)
     if isinstance(licence_locs, dict):
         all_ids = licence_locs.get(exam_type, [])
     else:

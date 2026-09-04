@@ -275,11 +275,12 @@ tr:hover td{background:var(--accent-bg)}
         <input type="text" id="ssn" placeholder="YYYYMMDDXXXX" value="{{ config.swedish_ssn if config.swedish_ssn != 'YYYYMMDD-XXXX' else '' }}" maxlength="13">
       </div>
       <div class="field"><label>Körkort</label>
-        <select id="licenceType" onchange="loadLocDetails()">
+        <select id="licenceType" onchange="onLicenceChange()">
           <option value="B" {{ 'selected' if config.get('licence_type','B') == 'B' }}>B - Personbil</option>
           <option value="A" {{ 'selected' if config.get('licence_type','B') == 'A' }}>A - Motorcykel</option>
           <option value="A2" {{ 'selected' if config.get('licence_type','B') == 'A2' }}>A2 - MC (Begränsad)</option>
           <option value="A1" {{ 'selected' if config.get('licence_type','B') == 'A1' }}>A1 - Lätt MC</option>
+          <option value="AM" {{ 'selected' if config.get('licence_type','B') == 'AM' }}>AM - Moped</option>
         </select>
       </div>
     </div>
@@ -391,7 +392,7 @@ tr:hover td{background:var(--accent-bg)}
 <script>
 /* ── State ── */
 var EIDS={'Körprov':12,'Kunskapsprov':3};
-var LICENCE_PARAMS={'B':{lid:5,vid:2,eids:{'Körprov':12,'Kunskapsprov':3}},'A':{lid:4,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'A1':{lid:2,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'A2':{lid:24,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}}};
+var LICENCE_PARAMS={'B':{lid:5,vid:2,eids:{'Körprov':12,'Kunskapsprov':3}},'A':{lid:4,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'A1':{lid:2,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'A2':{lid:24,vid:1,eids:{'Körprov':10,'Kunskapsprov':2}},'AM':{lid:1,vid:3,eids:{'Kunskapsprov':3}}};
 var allTimes=[],addedTimes=[];
 var selLocs={{ config.locations | tojson }};
 /* Demo vs live-läge: set from /api/config by loadLockState(). */
@@ -481,7 +482,7 @@ function initSmsToggle(){
 }
 
 /* ── Init ── */
-(function(){loadLocDetails();loadExistingRes();loadBookedExams();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn();loadWatch();loadLockState()})();
+(function(){onLicenceChange();loadExistingRes();loadBookedExams();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn();loadWatch();loadLockState()})();
 
 /* Ask the server which controls this visitor may use. The server enforces the
    same list on /save_config, so this only drives the lock badges. */
@@ -694,6 +695,20 @@ function loadLocDetails(){
   fetch('/api/location_details').then(function(r){return r.json()}).then(function(d){
     locDetails=d;renderLocBrowser();renderSelBar();
   });
+}
+
+/* Moped (AM) only has a knowledge test — force Kunskapsprov and lock it. */
+function onLicenceChange(){
+  var lt=document.getElementById('licenceType').value;
+  var et=document.getElementById('examType');
+  var kp=et.querySelector('option[value="Körprov"]');
+  if(lt==='AM'){
+    et.value='Kunskapsprov';
+    if(kp)kp.disabled=true;
+  }else if(kp){
+    kp.disabled=false;
+  }
+  loadLocDetails();
 }
 
 /* ── Location browser ── */

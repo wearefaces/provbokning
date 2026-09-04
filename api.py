@@ -13,6 +13,8 @@ LICENCE_TYPES = {
     "A": {"licence_id": 4, "vehicle_type_id": 1, "exam_ids": {"Körprov": 10, "Kunskapsprov": 2}},
     "A1": {"licence_id": 2, "vehicle_type_id": 1, "exam_ids": {"Körprov": 10, "Kunskapsprov": 2}},
     "A2": {"licence_id": 24, "vehicle_type_id": 1, "exam_ids": {"Körprov": 10, "Kunskapsprov": 2}},
+    # Moped klass I (AM) — knowledge test only. IDs unverified; see web.py.
+    "AM": {"licence_id": 1, "vehicle_type_id": 3, "exam_ids": {"Kunskapsprov": 3}},
 }
 
 # Backwards-compatible flat mapping (for legacy configs without licence_type)
