@@ -247,8 +247,12 @@ a{color:inherit;text-decoration:none}
       <a href="#faq">Vanliga frågor</a>
     </div>
     <div class="nav-cta">
+      {% if logged_in %}
+      <a href="/app" class="btn btn-primary">Öppna appen <span class="arr" aria-hidden="true">→</span></a>
+      {% else %}
       <a href="/app" class="btn btn-bankid"><img src="/static/bankid-mark.png" alt="" width="20" height="20"><span>Logga in<span class="bid-long"> med BankID</span></span></a>
       <a href="/app" class="btn btn-primary">Prova gratis <span class="arr" aria-hidden="true">→</span></a>
+      {% endif %}
     </div>
   </div>
 </nav>

@@ -1064,7 +1064,12 @@ def _fetch_location(sess: "http_requests.Session", ssn: str, exam_type_id: int,
 
 @app.route("/")
 def index():
-    return render_template("landing.html")
+    # Read-only peek: don't create a sid or TV context for anonymous visitors.
+    sid = session.get("sid")
+    with _tv_store_lock:
+        ctx = _tv_store.get(sid) if sid else None
+    logged_in = bool(ctx and ctx["auth"].get("authenticated")) or _is_demo_reviewer()
+    return render_template("landing.html", logged_in=logged_in)
 
 
 @app.route("/privacy")
