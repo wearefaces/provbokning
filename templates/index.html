@@ -515,6 +515,7 @@ function loadLockState(){
 
 /* ── Existing Trafikverket bookings ── */
 function loadBookedExams(){
+  if(!authenticated){return;}
   fetch('/api/booked_examinations').then(function(r){return r.json()}).then(function(d){
     if(!d||!d.ok)return;
     renderBookedExams(d.confirmed||[],d.active_reservations||[]);
