@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Provbokningsbevakning</title>
 <meta name="robots" content="noindex, follow">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -45,6 +48,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 
 /* Header */
 .hdr{text-align:center;padding:36px 12px 18px}
+.hdr-logo{display:block;height:34px;width:auto;margin:0 auto 20px}
 .hdr h1{font-size:2.1rem;color:var(--text);font-weight:700;letter-spacing:-.035em;line-height:1.15}
 .hdr h1 .muted{color:var(--text3);font-weight:600}
 .hdr p{color:var(--text3);font-size:.92rem;margin-top:10px;font-weight:400}
@@ -225,6 +229,7 @@ tr:hover td{background:var(--accent-bg)}
 
 <!-- Header -->
 <div class="hdr">
+  <a href="/"><img src="/static/logo.png" alt="Provbokning" class="hdr-logo"></a>
   <h1>Hitta <span class="muted">lediga</span> körkortsprov<br><span class="muted">automatiskt</span>.</h1>
   <p>Logga in med BankID, välj orter och datum — vi hittar &amp; bokar provet åt dig.</p>
   <div class="badges">

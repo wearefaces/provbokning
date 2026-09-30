@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Logga in · Provbokningsbevakning</title>
 <meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -68,7 +70,7 @@ form{display:flex;flex-direction:column;gap:14px}
 <body>
 <div class="box">
   <div class="logo">
-    <h1>Provbokning<span class="muted">·sbevakning</span></h1>
+    <h1><img src="/static/logo.png" alt="Provbokning" style="height:36px;width:auto"></h1>
     <p>Logga in för att fortsätta</p>
   </div>
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
