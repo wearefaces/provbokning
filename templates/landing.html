@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Provbokning – Hitta ledig körprovstid &amp; uppkörning automatiskt | Trafikverket-bevakning</title>
-<meta name="description" content="Slipp vänta månader på ledig provtid. Vi bevakar Trafikverket dygnet runt och hittar lediga körprov, uppkörning och kunskapsprov åt dig. SMS, e-post och webbnotis. BankID. Från 249 kr/mån, ingen bindningstid.">
+<meta name="description" content="Slipp vänta månader på ledig provtid. Vi bevakar Trafikverket dygnet runt och meddelar dig när en ledig tid dyker upp. Notis via SMS, e‑post och webbläsare. Du bokar själv hos Trafikverket med BankID. Från 249 kr/mån, ingen bindningstid.">
 <meta name="keywords" content="körprov, uppkörning, kunskapsprov, ledig provtid, Trafikverket, körkort, B-körkort, MC-körkort, A-körkort, avbokning, provbokning, körkort Stockholm, körkort Göteborg, körkort Malmö">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="author" content="Provbokning">
@@ -12,12 +12,12 @@
 <meta property="og:type" content="website">
 <meta property="og:locale" content="sv_SE">
 <meta property="og:title" content="Hitta ledig körprovstid automatiskt | Provbokning">
-<meta property="og:description" content="Vi bevakar Trafikverket dygnet runt och hittar lediga körprov, uppkörning och kunskapsprov åt dig. SMS, e-post, webbnotis. Från 249 kr/mån.">
+<meta property="og:description" content="Vi bevakar Trafikverket dygnet runt och meddelar dig när en ledig tid dyker upp. Notis via SMS, e‑post och webbläsare. Du bokar själv med BankID. Från 249 kr/mån.">
 <meta property="og:url" content="{{ site_url }}/">
 <meta property="og:site_name" content="Provbokning">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Hitta ledig körprovstid automatiskt">
-<meta name="twitter:description" content="Vi bevakar Trafikverket dygnet runt. SMS, e-post, webbnotis. Från 249 kr/mån.">
+<meta name="twitter:description" content="Vi bevakar Trafikverket dygnet runt och säger till när en ledig tid hittas. Du bokar själv med BankID. Från 249 kr/mån.">
 <meta property="og:image" content="{{ site_url }}/static/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -69,7 +69,7 @@
       "@type": "FAQPage",
       "mainEntity": [
         {"@type":"Question","name":"Vilka behörigheter och provtyper stödjer ni?","acceptedAnswer":{"@type":"Answer","text":"Alla behörigheter (B, A, A1, A2) samt både körprov (uppkörning) och kunskapsprov (teoriprov)."}},
-        {"@type":"Question","name":"Hur lång tid tar det att hitta en ledig provtid?","acceptedAnswer":{"@type":"Answer","text":"De flesta hittar en ledig tid inom 48 timmar. I storstadsregioner som Stockholm, Göteborg och Malmö går det ofta snabbare än så tack vare många avbokningar."}},
+        {"@type":"Question","name":"Hur lång tid tar det att hitta en ledig provtid?","acceptedAnswer":{"@type":"Answer","text":"Tiden varierar beroende på ort och säsong. Avbokade tider kan dyka upp när som helst – vi meddelar dig direkt när vi hittar en som matchar dina inställningar."}},
         {"@type":"Question","name":"Behöver jag ha datorn igång under tiden ni söker?","acceptedAnswer":{"@type":"Answer","text":"Nej. Bevakningen sker på vår server dygnet runt. Du får besked via SMS, e-post och webbnotis när en tid hittas, oavsett om sidan är öppen eller inte."}},
         {"@type":"Question","name":"Funkar det på mobilen?","acceptedAnswer":{"@type":"Answer","text":"Ja, hela tjänsten är mobilanpassad. BankID öppnas direkt på samma enhet eller via QR-kod på datorn."}},
         {"@type":"Question","name":"Hur hanteras min BankID-inloggning säkert?","acceptedAnswer":{"@type":"Answer","text":"Du autentiserar dig direkt mot Trafikverket via BankID. Vi sparar inga lösenord eller känsliga uppgifter, och din session är krypterad."}},
@@ -109,7 +109,8 @@ a{color:inherit;text-decoration:none}
 .nav-links a:hover{color:var(--text)}
 .nav-cta{margin-left:auto;display:flex;gap:10px;align-items:center}
 @media(max-width:860px){.nav-links{display:none}}
-@media(max-width:480px){.nav-cta .btn-primary{display:none}.nav-row{gap:12px}.brand img{height:24px}.nav-cta .btn{padding:10px 16px}}
+/* Keep free-demo CTA visible on mobile; hide login button instead */
+@media(max-width:480px){.nav-cta .btn-bankid{display:none}.nav-row{gap:12px}.brand img{height:24px}.nav-cta .btn{padding:10px 16px}}
 @media(max-width:400px){.bid-long{display:none}}
 
 /* Buttons: pill for every interactive control */
@@ -260,8 +261,8 @@ a{color:inherit;text-decoration:none}
     <h1>Hitta ledig <span class="muted">körprovstid</span> &amp; uppkörning <span class="muted">automatiskt</span>.</h1>
     <p class="lead">Att boka körprov hos Trafikverket kan ta veckor eller månader. Lediga tider släpps oregelbundet och försvinner på sekunder. <strong>Prova appen gratis i demoläge</strong> och aktivera live när du vill ha automatiska notiser och kunna boka.</p>
     <div class="cta-row">
-      <a href="/app" class="btn btn-primary btn-lg">Prova gratis demo <span class="arr" aria-hidden="true">→</span></a>
-      <a href="/app" class="btn btn-ghost btn-lg">Aktivera live från 249 kr/mån</a>
+      <a href="/app" class="btn btn-primary btn-lg">Prova gratis <span class="arr" aria-hidden="true">→</span></a>
+      <a href="/app" class="btn btn-ghost btn-lg">Aktivera live — 249 kr/mån</a>
     </div>
   </div>
 
@@ -287,7 +288,7 @@ a{color:inherit;text-decoration:none}
 <section class="wrap" aria-label="I korthet">
   <div class="proof">
     <div class="stat"><div class="n">3-6 mån</div><div class="l">Typisk väntetid hos Trafikverket</div></div>
-    <div class="stat"><div class="n">~2 dgr</div><div class="l">Genomsnittlig väntetid med oss</div></div>
+    <div class="stat"><div class="n">Direktnotis</div><div class="l">SMS/e‑post när en tid hittas</div></div>
     <div class="stat"><div class="n">24/7</div><div class="l">Bevakning dygnet runt</div></div>
   </div>
   <div class="trust">
@@ -345,7 +346,7 @@ a{color:inherit;text-decoration:none}
       </div>
       <div class="feature">
         <h3>Boka direkt med BankID</h3>
-        <p>När en tid hittas reserverar vi den i 15 minuter. Du loggar in med BankID och bokar med ett klick.</p>
+        <p>Du bokar själv hos Trafikverket med BankID. När möjligt reserverar vi tiden i upp till 15 minuter.</p>
       </div>
     </div>
   </div>
@@ -416,7 +417,7 @@ a{color:inherit;text-decoration:none}
     <h2>Vanliga <span class="muted">frågor</span>.</h2>
     <div class="faq">
       <div class="faq-item"><h3>Vilka behörigheter stödjer ni?</h3><p>Alla behörigheter (B, A, A1, A2) samt körprov och kunskapsprov.</p></div>
-      <div class="faq-item"><h3>Hur lång tid tar det att hitta en tid?</h3><p>De flesta hittar en ledig tid inom 48 timmar. I storstadsregioner går det ofta snabbare än så.</p></div>
+      <div class="faq-item"><h3>Hur lång tid tar det att hitta en tid?</h3><p>Det varierar mellan orter och över året. Avbokningar kan komma när som helst – vi säger till direkt när en tid dyker upp.</p></div>
       <div class="faq-item"><h3>Kan jag stänga ner sidan medan jag väntar?</h3><p>Ja, bevakningen sker på vår server. Du får notis via SMS och e-post oavsett om sidan är öppen eller inte.</p></div>
       <div class="faq-item"><h3>Funkar det på mobilen?</h3><p>Ja, gränssnittet är fullt mobilanpassat. BankID öppnas direkt på samma enhet eller via QR-kod.</p></div>
       <div class="faq-item"><h3>Hur hanteras BankID säkert?</h3><p>Du autentiserar dig direkt mot Trafikverket via BankID. Vi sparar inga lösenord och din session är krypterad.</p></div>
@@ -443,7 +444,6 @@ a{color:inherit;text-decoration:none}
     <a href="/subscribe">Anmäl dig</a>
     <a href="/app">Öppna appen</a>
     <a href="/privacy">Integritetspolicy</a>
-    <a href="/admin">Admin</a>
   </nav>
 </footer>
 </body>
