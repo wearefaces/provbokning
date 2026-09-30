@@ -15,9 +15,9 @@
   --bg:#eceef2;
   --card:#ffffff;
   --border:#e6e8ed;
-  --accent:#111827;
-  --accent2:#1f2937;
-  --accent-bg:rgba(17,24,39,.05);
+  --accent:#0e1419;
+  --accent2:#1f2933;
+  --accent-bg:rgba(14,20,25,.05);
   --red:#dc2626;
   --red-bg:#fdeaea;
   --red-border:rgba(220,38,38,.22);
@@ -55,11 +55,15 @@ form{display:flex;flex-direction:column;gap:14px}
 }
 .field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .btn{
-  margin-top:8px;padding:13px 22px;border:none;border-radius:999px;
-  background:var(--accent);color:#fff;font-size:.95rem;font-weight:600;
-  cursor:pointer;font-family:inherit;transition:all .15s;
+  margin-top:8px;display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  padding:14px 26px;border:1px solid transparent;border-radius:999px;
+  background:var(--accent);color:#fff;font-size:.98rem;font-weight:600;line-height:1.6;white-space:nowrap;
+  cursor:pointer;font-family:inherit;transition:background-color .2s,box-shadow .2s,transform .2s;
 }
-.btn:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 8px 20px rgba(17,24,39,.18)}
+.btn:hover{background:var(--accent2);box-shadow:0 10px 24px -10px rgba(14,20,25,.5)}
+.btn:active{transform:translateY(1px) scale(.98)}
+.btn .arr{display:inline-flex;width:22px;height:22px;border-radius:50%;background:#01d27b;color:var(--accent);align-items:center;justify-content:center;font-size:.8rem}
+:focus-visible{outline:2px solid #047a4a;outline-offset:3px}
 .err{
   background:var(--red-bg);border:1px solid var(--red-border);
   color:var(--red);font-size:.86rem;padding:11px 13px;border-radius:12px;
@@ -83,7 +87,7 @@ form{display:flex;flex-direction:column;gap:14px}
       <label for="password">Lösenord</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>
     </div>
-    <button class="btn" type="submit">Logga in</button>
+    <button class="btn" type="submit">Logga in <span class="arr" aria-hidden="true">→</span></button>
   </form>
 </div>
 </body>
