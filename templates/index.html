@@ -77,9 +77,9 @@ h1,h2,h3{text-wrap:balance}
 .btn .arr{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--brand);color:var(--accent);align-items:center;justify-content:center;font-size:.8rem}
 .btn-go{background:var(--accent);color:#fff}.btn-go:hover{background:var(--accent2);box-shadow:0 10px 24px -10px rgba(14,20,25,.5)}.btn-go:disabled{opacity:.35;cursor:not-allowed;box-shadow:none;transform:none}
 .btn-st{background:transparent;color:var(--red);border-color:var(--red-border)}.btn-st:hover{background:var(--red-bg)}.btn-st:disabled{opacity:.35;cursor:not-allowed}
-.btn-bk{background:var(--accent);color:#fff;padding:14px 26px;font-size:.98rem}.btn-bk:hover{background:var(--accent2);box-shadow:0 10px 24px -10px rgba(14,20,25,.5)}
-.btn-dm{background:transparent;color:var(--text);border-color:#d3d7dd;padding:14px 26px;font-size:.98rem}.btn-dm:hover{background:var(--card);border-color:var(--border)}
-.btn-sm{padding:8px 16px;font-size:.84rem}
+.btn-bk{background:var(--accent);color:#fff}.btn-bk:hover{background:var(--accent2);box-shadow:0 10px 24px -10px rgba(14,20,25,.5)}
+.btn-dm{background:transparent;color:var(--text);border-color:#d3d7dd}.btn-dm:hover{background:var(--card);border-color:var(--border)}
+.btn-dm:disabled{opacity:.35;cursor:not-allowed}
 
 /* Mode toggle */
 .mode-tg{display:none}
@@ -90,7 +90,23 @@ h1,h2,h3{text-wrap:balance}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:26px 28px;margin-bottom:22px;box-shadow:var(--shadow)}
 .card h3{font-family:var(--display);font-size:1.1rem;color:var(--text);font-weight:600;margin-bottom:16px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
 .card-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:600px){.card-row{grid-template-columns:1fr}}
+.card-row.three{grid-template-columns:1.2fr 1fr 1fr}
+@media(max-width:600px){.card-row,.card-row.three{grid-template-columns:1fr}}
+
+/* Settings rows: text left, control right, hairline between */
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0;border-top:1px solid var(--border)}
+.set-row .t{font-size:.95rem;font-weight:600;color:var(--text)}
+.set-row .d{font-size:.86rem;color:var(--text2);margin-top:3px;max-width:56ch}
+.set-row input[type=checkbox]{width:20px;height:20px;accent-color:var(--green);cursor:pointer;flex-shrink:0}
+.set-sub{padding:0 0 18px}
+.lockBadge{font-family:'Inter',system-ui,sans-serif;font-size:.72rem;font-weight:600;color:var(--text2);background:var(--card2);border:1px solid var(--border);padding:1px 8px;border-radius:999px;margin-left:6px;letter-spacing:0;text-transform:none;vertical-align:middle}
+
+/* Demo/live banner */
+.banner{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:var(--shadow)}
+.banner-dot{width:10px;height:10px;border-radius:50%;background:var(--yellow);flex-shrink:0}
+.banner-body{flex:1;min-width:200px}
+.banner-title{font-weight:600;font-size:.95rem;color:var(--text)}
+.banner-sub{font-size:.86rem;color:var(--text2);margin-top:2px}
 
 /* Form */
 .field{display:flex;flex-direction:column;gap:5px}
@@ -107,9 +123,8 @@ h1,h2,h3{text-wrap:balance}
 /* Location Browser */
 .loc-browser{margin-top:8px}
 .loc-search{position:relative;margin-bottom:16px}
-.loc-search input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 16px 11px 40px;color:var(--text);font-size:.9rem;font-family:inherit}
+.loc-search input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 16px;color:var(--text);font-size:.92rem;font-family:inherit}
 .loc-search input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px var(--brand-bg)}
-.loc-search .icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:.92rem}
 .loc-selected-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
 .loc-tag{background:var(--brand-bg);color:var(--green);padding:5px 12px;border-radius:20px;font-size:.84rem;font-weight:600;display:flex;align-items:center;gap:6px;border:1px solid var(--brand-line)}
 .loc-tag .x{cursor:pointer;font-size:.88rem;line-height:1;color:var(--green);opacity:.6}.loc-tag .x:hover{opacity:1;color:var(--red)}
@@ -143,9 +158,10 @@ h1,h2,h3{text-wrap:balance}
 .res-card .cost{font-size:.82rem;color:var(--text3);margin-top:10px}
 .res-exp{opacity:.6;border-color:var(--border)}.res-exp .badge{background:var(--red-bg);color:var(--red);border-color:var(--red-border)}
 
-/* Stats */
-.stats{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:18px 20px;flex:1;min-width:90px;text-align:center;box-shadow:var(--shadow)}
+/* Stats: one panel, hairline dividers */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;box-shadow:var(--shadow);overflow:hidden}
+.stat{padding:18px 22px}
+.stat+.stat{border-left:1px solid var(--border)}
 .stat .n{font-family:var(--display);font-size:1.8rem;font-weight:700;color:var(--text);letter-spacing:-.02em;font-variant-numeric:tabular-nums}.stat .l{font-size:.78rem;color:var(--text2);margin-top:4px;font-weight:500}
 .stat.grn .n{color:var(--green)}.stat.red .n{color:var(--red)}
 
@@ -197,7 +213,7 @@ tr:hover td{background:var(--accent-bg)}
 @media(max-width:600px){
   .app{padding:16px 12px 80px}
   .status-bar{align-items:center;gap:10px 12px}
-  .st-right{margin-left:0;width:100%;justify-content:space-between}
+  .st-right{margin-left:0;width:100%;justify-content:space-between;flex-wrap:wrap;gap:10px 14px}
   .loc-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
   .res-card{padding:22px 14px}
 }
@@ -212,13 +228,13 @@ tr:hover td{background:var(--accent-bg)}
 </header>
 
 <!-- Demo / Live status banner -->
-<div id="billingBanner" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:var(--shadow)">
-  <div id="billingDot" style="width:10px;height:10px;border-radius:50%;background:var(--yellow);flex-shrink:0"></div>
-  <div style="flex:1;min-width:200px">
-    <div id="billingTitle" style="font-weight:700;font-size:.95rem;color:var(--text)">Demoläge</div>
-    <div id="billingSub" style="font-size:.82rem;color:var(--text2);margin-top:2px">Du kan utforska appen och söka tider. Aktivera live-läge för att boka och få automatiska notiser.</div>
+<div id="billingBanner" class="banner">
+  <div id="billingDot" class="banner-dot"></div>
+  <div class="banner-body">
+    <div id="billingTitle" class="banner-title">Demoläge</div>
+    <div id="billingSub" class="banner-sub">Du kan utforska appen och söka tider. Aktivera live-läge för att boka och få automatiska notiser.</div>
   </div>
-  <button id="billingBtn" class="btn btn-go btn-sm" onclick="startCheckout()">Aktivera live <span id="billingPrice"></span></button>
+  <button id="billingBtn" class="btn btn-go" onclick="startCheckout()">Aktivera live <span id="billingPrice"></span></button>
 </div>
 
 <!-- BankID Login Overlay -->
@@ -257,7 +273,7 @@ tr:hover td{background:var(--accent-bg)}
   </div>
   <div class="st-right">
     <span id="authStatus" style="font-size:.82rem;font-weight:500">Kontrollerar...</span>
-    <button class="btn btn-sm btn-st" id="logoutBtn" onclick="doLogout()" style="display:none">Logga ut</button>
+    <button class="btn btn-st" id="logoutBtn" onclick="doLogout()" style="display:none">Logga ut</button>
     <div class="tmr" id="tmr">00:00:00</div>
     <div id="scCnt" style="font-size:.82rem;color:var(--text3)">0 sökningar</div>
   </div>
@@ -282,7 +298,7 @@ tr:hover td{background:var(--accent-bg)}
     <span class="arr open" id="sArr">&#9660;</span>
   </div>
   <div class="coll-b open" id="sBody">
-    <div class="card-row" style="margin-bottom:12px">
+    <div class="card-row three" style="margin-bottom:14px">
       <div class="field"><label>Personnummer</label>
         <input type="text" id="ssn" placeholder="YYYYMMDDXXXX" value="{{ config.swedish_ssn if config.swedish_ssn != 'YYYYMMDD-XXXX' else '' }}" maxlength="13">
       </div>
@@ -295,8 +311,6 @@ tr:hover td{background:var(--accent-bg)}
           <option value="AM" {{ 'selected' if config.get('licence_type','B') == 'AM' }}>AM - Moped</option>
         </select>
       </div>
-    </div>
-    <div class="card-row" style="margin-bottom:12px">
       <div class="field"><label>Provtyp</label>
         <select id="examType" onchange="loadLocDetails()">
           <option value="Körprov" {{ 'selected' if config.exam_type == 'Körprov' }}>Körprov</option>
@@ -304,49 +318,45 @@ tr:hover td{background:var(--accent-bg)}
         </select>
       </div>
     </div>
-    <div class="card-row" style="margin-bottom:16px">
-      <div class="field"><label>Från datum <span class="lockBadge" style="display:none;font-weight:600;color:var(--accent)" title="Kräver live-läge">🔒 live</span></label><input type="date" id="dtFrom" value="{{ config.date_from }}"></div>
-      <div class="field"><label>Till datum <span class="lockBadge" style="display:none;font-weight:600;color:var(--accent)" title="Kräver live-läge">🔒 live</span></label><input type="date" id="dtTo" value="{{ config.date_to }}"></div>
+    <div class="card-row" style="margin-bottom:18px">
+      <div class="field"><label>Från datum <span class="lockBadge" style="display:none" title="Kräver live-läge">Kräver live</span></label><input type="date" id="dtFrom" value="{{ config.date_from }}"></div>
+      <div class="field"><label>Till datum <span class="lockBadge" style="display:none" title="Kräver live-läge">Kräver live</span></label><input type="date" id="dtTo" value="{{ config.date_to }}"></div>
     </div>
 
     <!-- SMS Notifications (user picks own number; admin sets API creds in /admin) -->
-    <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;font-weight:600;color:var(--text)">
-          <input type="checkbox" id="smsEnabled" {{ 'checked' if config.get('sms_enabled') }} style="width:18px;height:18px;accent-color:var(--accent)">
-          SMS-notiser
-        </label>
+    <label class="set-row" for="smsEnabled" style="cursor:pointer">
+      <div>
+        <div class="t">SMS-notiser</div>
+        <div class="d">Få ett SMS så fort en ledig tid hittas.</div>
       </div>
-      <div id="smsFields" style="display:none">
-        <div class="card-row" style="margin-bottom:10px">
-          <div class="field"><label>Telefonnummer</label>
-            <input type="tel" id="smsTo" placeholder="+46XXXXXXXXX" value="{{ config.get('sms_to','') }}">
-          </div>
+      <input type="checkbox" id="smsEnabled" {{ 'checked' if config.get('sms_enabled') }}>
+    </label>
+    <div id="smsFields" class="set-sub" style="display:none">
+      <div class="card-row">
+        <div class="field"><label>Telefonnummer</label>
+          <input type="tel" id="smsTo" placeholder="+46XXXXXXXXX" value="{{ config.get('sms_to','') }}">
         </div>
-        <p style="font-size:.76rem;color:var(--text3);margin-top:4px">Ange ditt mobilnummer i internationellt format (+46…) för att få SMS när lediga tider hittas.</p>
       </div>
+      <p style="font-size:.84rem;color:var(--text2);margin-top:8px">Ange ditt mobilnummer i internationellt format (+46…).</p>
     </div>
 
     <!-- Browser notifications -->
-    <div style="margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div>
-          <div style="font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:4px">Webbnotiser</div>
-          <div id="notifStatus" style="font-size:.78rem;color:var(--text3)">Kontrollerar…</div>
-        </div>
-        <button class="btn btn-go btn-sm" id="notifBtn" onclick="enableWebNotif()">Aktivera</button>
+    <div class="set-row">
+      <div>
+        <div class="t">Webbnotiser</div>
+        <div id="notifStatus" class="d">Kontrollerar…</div>
+        <div class="d">Notis i webbläsaren även när fliken är minimerad. Bara du ser den, inget skickas till servern.</div>
       </div>
-      <p style="font-size:.76rem;color:var(--text3);margin-top:8px">Få en toast-notis i webbläsaren (även när fliken är minimerad) så fort en ledig tid hittas. Bara du själv ser notisen – inget skickas till servern.</p>
+      <button class="btn btn-go" id="notifBtn" onclick="enableWebNotif()">Aktivera</button>
     </div>
 
     <!-- Location Browser -->
-    <h3>Välj orter <span style="font-weight:400;color:var(--text3);text-transform:none;font-size:.8rem">(lämna tomt = alla)</span>
-      <span class="lockBadge" style="display:none;font-weight:600;color:var(--accent);text-transform:none;font-size:.8rem" title="Kräver live-läge">🔒 live</span>
+    <h3 style="padding-top:18px;border-top:1px solid var(--border)">Välj orter <span style="font-family:'Inter',system-ui,sans-serif;font-weight:400;color:var(--text2);font-size:.86rem">(lämna tomt = alla)</span>
+      <span class="lockBadge" style="display:none" title="Kräver live-läge">Kräver live</span>
     </h3>
     <div class="loc-browser" id="locCard">
       <div class="loc-search">
-        <span class="icon" style="color:var(--text3)">&#128269;</span>
-        <input type="text" id="locQ" placeholder="Sök ort..." oninput="filterLocBrowser()">
+        <input type="search" id="locQ" placeholder="Sök ort…" aria-label="Sök ort" oninput="filterLocBrowser()">
       </div>
       <div class="loc-selected-bar" id="selBar"></div>
       <div id="locBrowser"></div>
@@ -435,10 +445,10 @@ function updateNotifUI(){
     btn.disabled=true;btn.textContent='Ej tillgänglig';return;
   }
   if(notifPermission==='granted'){
-    st.innerHTML='<span style="color:var(--green)">●</span> Aktiverat – du får notis när tid hittas';
+    st.innerHTML='<span style="color:var(--green)">●</span> Aktiverat. Du får notis när en tid hittas.';
     btn.textContent='Aktiverat';btn.disabled=true;
   }else if(notifPermission==='denied'){
-    st.innerHTML='<span style="color:var(--red)">●</span> Blockerat – klicka på <b>låset</b> i adressfältet → Notiser → <b>Tillåt</b>, ladda sedan om sidan';
+    st.innerHTML='<span style="color:var(--red)">●</span> Blockerat. Klicka på <b>låset</b> i adressfältet, välj Notiser och <b>Tillåt</b>, ladda sedan om sidan.';
     btn.textContent='Blockerat';btn.disabled=true;
   }else{
     st.textContent='Inte aktiverat ännu';
@@ -590,11 +600,11 @@ function loadBilling(){
       dot.style.background='var(--yellow)';
       t.textContent='Demoläge';
       if(!d.stripe_enabled){
-        s.textContent='Betalning är ännu inte aktiverad – appen körs i fri demo.';
+        s.textContent='Betalning är ännu inte aktiverad. Appen körs i fri demo.';
         btn.style.display='none';
       } else {
-        s.textContent='I demoläget ser du hur många lediga tider som finns – aktivera live-läge för datum, tid, egna orter, bokning och SMS.';
-        price.textContent='– '+(d.price_label||'99 kr/mån');
+        s.textContent='I demoläget ser du hur många lediga tider som finns. Aktivera live-läge för datum, tid, egna orter, bokning och SMS.';
+        price.textContent='· '+(d.price_label||'99 kr/mån');
       }
     }
     /* Paid state decides which controls are usable, so refresh the locks
@@ -852,7 +862,7 @@ async function startScanner(){
 
       if(addedTimes.length>0){
         var best=addedTimes.sort(function(a,b){return(a.date+a.time).localeCompare(b.date+b.time)})[0];
-        var slotDesc=best.date+' '+best.time+' — '+best.location;
+        var slotDesc=best.date+' '+best.time+', '+best.location;
         var notifBody=addedTimes.length===1?slotDesc:addedTimes.length+' nya tider! Först: '+slotDesc;
         sendNotification('Ledig tid hittad!',notifBody,true);
         if(!activeRes){
@@ -974,7 +984,7 @@ function updWatchTxt(){
     : (running
         ? (watchAllowed
             ? 'Söker bara medan den här sidan är öppen'
-            : 'Söker bara medan sidan är öppen – aktivera live-läge för bevakning i bakgrunden')
+            : 'Söker bara medan sidan är öppen. Aktivera live-läge för bevakning i bakgrunden.')
         : '');
 }
 
@@ -1091,12 +1101,12 @@ function confirmBk(){
   var sl=activeRes.slot||{};
   var url=buildBookingUrl(sl);
   // Copy the slot details to the clipboard so the user can paste / cross-check.
-  var info=(sl.date||'')+' '+(sl.time||'')+' – '+(sl.location||'');
+  var info=(sl.date||'')+' '+(sl.time||'')+', '+(sl.location||'');
   try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(info)}catch(e){}
   var win=window.open(url,'_blank');
   if(!win){
     // Popup blocked – fall back to same-tab navigation after a tiny delay so the toast shows.
-    showT('Popup blockerades – öppnar i samma flik...');
+    showT('Popup blockerades. Öppnar i samma flik…');
     setTimeout(function(){location.href=url},300);
   }else{
     showT('Öppnar Trafikverket. Välj: '+info);
@@ -1176,7 +1186,7 @@ function renderTbl(){
 async function qRes(date,time,loc,name,cost,oid){
   if(activeRes){showT('Du har redan en aktiv reservation!',true);return}
   await createRes({date:date,time:time,location:loc,name:name,cost:cost,occasion_id:oid});
-  showT('Tid reserverad: '+date+' '+time+' — '+loc);window.scrollTo({top:0,behavior:'smooth'});
+  showT('Tid reserverad: '+date+' '+time+', '+loc);window.scrollTo({top:0,behavior:'smooth'});
 }
 function showT(msg,err){var t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(err?'err':'ok');t.style.display='block';setTimeout(function(){t.style.display='none'},5000)}
 </script>
