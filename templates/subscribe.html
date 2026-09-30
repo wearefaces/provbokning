@@ -48,18 +48,29 @@ button:disabled{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none}
 .foot{margin-top:22px;font-size:.78rem;color:var(--text3);text-align:center;line-height:1.5}
 .foot a{color:var(--text2);text-decoration:none}
 .hint{font-size:.78rem;color:var(--text3);margin-top:6px}
+.value{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:22px;font-size:.88rem;color:var(--text2);line-height:1.55}
+.value ul{list-style:none;display:grid;gap:8px;margin:0}
+.value li{display:flex;gap:10px;align-items:flex-start}
+.value li::before{content:"✓";color:var(--green);font-weight:700;flex-shrink:0}
+.value .price-line{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-weight:600;color:var(--text);font-size:.9rem}
+.value .fine{margin-top:8px;font-size:.8rem;color:var(--text3);font-weight:400}
+.value a{color:var(--text);text-decoration:underline;text-underline-offset:2px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <a href="/"><img src="/static/logo.png" alt="Provbokning" style="display:block;height:30px;width:auto;margin-bottom:22px"></a>
-    <h1>Få <span class="muted">notis om</span> ledig provtid.</h1>
-    <p class="sub">Anmäl ditt nummer så får du SMS så fort vi hittar en ledig körprovstid hos Trafikverket. <span id="priceLabel"></span></p>
-    <div class="badges">
-      <span class="b1">◐ Snabbt</span>
-      <span class="b2">✓ Automatiskt</span>
-      <span class="b3">★ Trafikverket</span>
+    <h1>Aktivera <span class="muted">live-bevakning</span>.</h1>
+    <p class="sub">Vi hittar matchande tider och meddelar dig. Du loggar in med BankID hos Trafikverket och slutför bokningen själv.</p>
+    <div class="value">
+      <ul>
+        <li>Bevakning 24/7 av Trafikverket</li>
+        <li>Notis via SMS, e-post och webb</li>
+        <li>Matchande orter efter dina val</li>
+      </ul>
+      <div class="price-line">249 kr/mån · Ingen bindningstid · Avsluta när du vill</div>
+      <div class="fine">Betalning via Stripe. <a href="/privacy">Integritetspolicy</a>. <span id="priceLabel"></span></div>
     </div>
 
     {% if thanks %}
@@ -83,11 +94,11 @@ button:disabled{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none}
         <label for="email">E-postadress</label>
         <input id="email" type="email" autocomplete="email" placeholder="du@example.com">
       </div>
-      <button type="submit" id="submit">Anmäl mig</button>
+      <button type="submit" id="submit">Aktivera live</button>
       <div id="msg" class="msg"></div>
     </form>
     {% endif %}
-    <div class="foot">Drivs av <strong>Provbokningsbevakning</strong></div>
+    <div class="foot">Drivs av <strong>Provbokningsbevakning</strong> · <a href="/privacy">Integritetspolicy</a> · <a href="/app">Prova demo</a></div>
   </div>
 </div>
 
@@ -98,10 +109,11 @@ fetch('/api/payment/config').then(r=>r.json()).then(c=>{
   const lbl = document.getElementById('priceLabel');
   const btn = document.getElementById('submit');
   if (c.stripe_enabled && c.price_label){
-    lbl.innerHTML = '<strong>'+c.price_label+'</strong>';
-    if (btn) btn.textContent = 'Prenumerera ('+c.price_label+')';
+    lbl.innerHTML = '';
+    if (btn) btn.textContent = 'Aktivera live ('+c.price_label+')';
   } else {
     lbl.textContent = '';
+    if (btn) btn.textContent = 'Aktivera live';
   }
 }).catch(()=>{});
 
@@ -151,7 +163,7 @@ if (form) form.addEventListener('submit', async (e) => {
     msg.textContent = 'Nätverksfel: ' + err.message;
   } finally {
     btn.disabled = false;
-    btn.textContent = payCfg.stripe_enabled ? ('Prenumerera ('+payCfg.price_label+')') : 'Anmäl mig';
+    btn.textContent = payCfg.stripe_enabled && payCfg.price_label ? ('Aktivera live ('+payCfg.price_label+')') : 'Aktivera live';
   }
 });
 </script>

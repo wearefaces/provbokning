@@ -69,7 +69,7 @@
       "@type": "FAQPage",
       "mainEntity": [
         {"@type":"Question","name":"Vilka behörigheter och provtyper stödjer ni?","acceptedAnswer":{"@type":"Answer","text":"Alla behörigheter (B, A, A1, A2) samt både körprov (uppkörning) och kunskapsprov (teoriprov)."}},
-        {"@type":"Question","name":"Hur lång tid tar det att hitta en ledig provtid?","acceptedAnswer":{"@type":"Answer","text":"De flesta hittar en ledig tid inom 48 timmar. I storstadsregioner som Stockholm, Göteborg och Malmö går det ofta snabbare än så tack vare många avbokningar."}},
+        {"@type":"Question","name":"Hur lång tid tar det att hitta en ledig provtid?","acceptedAnswer":{"@type":"Answer","text":"Avbokade tider dyker upp oregelbundet. Vi meddelar dig så fort en match hittas. Hur snabbt det går beror på ort, efterfrågan och hur flexibel du är med datum och orter."}},
         {"@type":"Question","name":"Behöver jag ha datorn igång under tiden ni söker?","acceptedAnswer":{"@type":"Answer","text":"Nej. Bevakningen sker på vår server dygnet runt. Du får besked via SMS, e-post och webbnotis när en tid hittas, oavsett om sidan är öppen eller inte."}},
         {"@type":"Question","name":"Funkar det på mobilen?","acceptedAnswer":{"@type":"Answer","text":"Ja, hela tjänsten är mobilanpassad. BankID öppnas direkt på samma enhet eller via QR-kod på datorn."}},
         {"@type":"Question","name":"Hur hanteras min BankID-inloggning säkert?","acceptedAnswer":{"@type":"Answer","text":"Du autentiserar dig direkt mot Trafikverket via BankID. Vi sparar inga lösenord eller känsliga uppgifter, och din session är krypterad."}},
@@ -109,8 +109,8 @@ a{color:inherit;text-decoration:none}
 .nav-links a:hover{color:var(--text)}
 .nav-cta{margin-left:auto;display:flex;gap:10px;align-items:center}
 @media(max-width:860px){.nav-links{display:none}}
-@media(max-width:480px){.nav-cta .btn-primary{display:none}.nav-row{gap:12px}.brand img{height:24px}.nav-cta .btn{padding:10px 16px}}
-@media(max-width:400px){.bid-long{display:none}}
+@media(max-width:480px){.nav-row{gap:12px}.brand img{height:24px}.nav-cta .btn{padding:9px 14px;font-size:.85rem}.bid-long{display:none}}
+@media(max-width:360px){.nav-cta .btn-bankid{padding:9px 10px}}
 
 /* Buttons: pill for every interactive control */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 22px;border:1px solid transparent;border-radius:999px;font:inherit;font-weight:600;font-size:.92rem;white-space:nowrap;cursor:pointer;transition:background-color .2s,border-color .2s,box-shadow .2s,transform .2s}
@@ -258,10 +258,10 @@ a{color:inherit;text-decoration:none}
   <div>
     <span class="kicker">Slipp vänta i månader</span>
     <h1>Hitta ledig <span class="muted">körprovstid</span> &amp; uppkörning <span class="muted">automatiskt</span>.</h1>
-    <p class="lead">Att boka körprov hos Trafikverket kan ta veckor eller månader. Lediga tider släpps oregelbundet och försvinner på sekunder. <strong>Prova appen gratis i demoläge</strong> och aktivera live när du vill ha automatiska notiser och kunna boka.</p>
+    <p class="lead">Avbokade tider försvinner på sekunder. Vi bevakar Trafikverket dygnet runt och meddelar dig — du bokar själv med BankID. <strong>Prova appen gratis i demoläge</strong> och aktivera live när du vill ha automatiska notiser.</p>
     <div class="cta-row">
-      <a href="/app" class="btn btn-primary btn-lg">Prova gratis demo <span class="arr" aria-hidden="true">→</span></a>
-      <a href="/app" class="btn btn-ghost btn-lg">Aktivera live från 249 kr/mån</a>
+      <a href="/app" class="btn btn-primary btn-lg">Prova gratis <span class="arr" aria-hidden="true">→</span></a>
+      <a href="/subscribe" class="btn btn-ghost btn-lg">Aktivera live — 249 kr/mån</a>
     </div>
   </div>
 
@@ -287,20 +287,21 @@ a{color:inherit;text-decoration:none}
 <section class="wrap" aria-label="I korthet">
   <div class="proof">
     <div class="stat"><div class="n">3-6 mån</div><div class="l">Typisk väntetid hos Trafikverket</div></div>
-    <div class="stat"><div class="n">~2 dgr</div><div class="l">Genomsnittlig väntetid med oss</div></div>
+    <div class="stat"><div class="n">Sekunder</div><div class="l">Avbokade tider försvinner fort</div></div>
     <div class="stat"><div class="n">24/7</div><div class="l">Bevakning dygnet runt</div></div>
   </div>
   <div class="trust">
-    <span>BankID-verifiering</span>
+    <span>BankID direkt mot Trafikverket</span>
+    <span>Inga lösenord sparas hos oss</span>
+    <span>Stripe</span>
     <span>Ingen bindningstid</span>
-    <span>Säker betalning via Stripe</span>
   </div>
 </section>
 
 <section class="section" id="hur">
   <div class="wrap">
     <h2>Tre steg till <span class="muted">ditt körkort</span>.</h2>
-    <p class="sub">Kom igång på några minuter. Vi sköter resten åt dig.</p>
+    <p class="sub">Kom igång på några minuter. Vi bevakar och meddelar dig — du bokar själv med BankID.</p>
     <ol class="steps">
       <li class="step">
         <h3>Du ställer in tjänsten</h3>
@@ -344,8 +345,8 @@ a{color:inherit;text-decoration:none}
         <p>Sök på flera orter samtidigt. Ju fler orter, desto snabbare chans till en avbokning.</p>
       </div>
       <div class="feature">
-        <h3>Boka direkt med BankID</h3>
-        <p>När en tid hittas reserverar vi den i 15 minuter. Du loggar in med BankID och bokar med ett klick.</p>
+        <h3>Du bokar med BankID</h3>
+        <p>När en tid hittas kan den hållas kort så du hinner agera. Du loggar in med BankID mot Trafikverket och slutför bokningen själv.</p>
       </div>
     </div>
   </div>
@@ -402,11 +403,11 @@ a{color:inherit;text-decoration:none}
         <li>Automatisk bevakning dygnet runt</li>
         <li>Notis via SMS, e-post och webbläsare</li>
         <li>Alla behörigheter och provtyper</li>
-        <li>Boka direkt med BankID när tid hittas</li>
+        <li>Notis när tid hittas — du bokar själv med BankID</li>
         <li>Ingen bindningstid, avsluta när du vill</li>
       </ul>
-      <a href="/app" class="btn btn-primary btn-lg">Aktivera live <span class="arr" aria-hidden="true">→</span></a>
-      <p class="note">Börja med gratis demo. Uppgradera när du vill. Säker betalning via Stripe.</p>
+      <a href="/subscribe" class="btn btn-primary btn-lg">Aktivera live — 249 kr/mån <span class="arr" aria-hidden="true">→</span></a>
+      <p class="note">249 kr/mån · Ingen bindningstid · Avsluta när du vill · Betalning via Stripe<br>Demo: utforska utan kort. Live: BankID + bevakning + notiser.</p>
     </div>
   </div>
 </section>
@@ -416,7 +417,7 @@ a{color:inherit;text-decoration:none}
     <h2>Vanliga <span class="muted">frågor</span>.</h2>
     <div class="faq">
       <div class="faq-item"><h3>Vilka behörigheter stödjer ni?</h3><p>Alla behörigheter (B, A, A1, A2) samt körprov och kunskapsprov.</p></div>
-      <div class="faq-item"><h3>Hur lång tid tar det att hitta en tid?</h3><p>De flesta hittar en ledig tid inom 48 timmar. I storstadsregioner går det ofta snabbare än så.</p></div>
+      <div class="faq-item"><h3>Hur lång tid tar det att hitta en tid?</h3><p>Avbokade tider dyker upp oregelbundet. Vi meddelar dig så fort en match hittas. Tiden varierar beroende på ort, efterfrågan och hur flexibel du är.</p></div>
       <div class="faq-item"><h3>Kan jag stänga ner sidan medan jag väntar?</h3><p>Ja, bevakningen sker på vår server. Du får notis via SMS och e-post oavsett om sidan är öppen eller inte.</p></div>
       <div class="faq-item"><h3>Funkar det på mobilen?</h3><p>Ja, gränssnittet är fullt mobilanpassat. BankID öppnas direkt på samma enhet eller via QR-kod.</p></div>
       <div class="faq-item"><h3>Hur hanteras BankID säkert?</h3><p>Du autentiserar dig direkt mot Trafikverket via BankID. Vi sparar inga lösenord och din session är krypterad.</p></div>
@@ -430,9 +431,12 @@ a{color:inherit;text-decoration:none}
   <div class="final">
     <div>
       <h2>Sluta vänta. Prova demo och aktivera när du vill.</h2>
-      <p>Öppna appen på under en minut. Aktivera live-läge när du är redo att få notiser och boka tider automatiskt.</p>
+      <p>Öppna appen på under en minut. Aktivera live när du är redo att få notiser — du bokar själv med BankID hos Trafikverket.</p>
     </div>
-    <a href="/app" class="btn btn-primary btn-lg">Öppna appen gratis <span class="arr" aria-hidden="true">→</span></a>
+    <div class="cta-row">
+      <a href="/app" class="btn btn-primary btn-lg">Öppna appen gratis <span class="arr" aria-hidden="true">→</span></a>
+      <a href="/subscribe" class="btn btn-ghost btn-lg">Aktivera live — 249 kr/mån</a>
+    </div>
   </div>
 </section>
 </main>
@@ -443,7 +447,6 @@ a{color:inherit;text-decoration:none}
     <a href="/subscribe">Anmäl dig</a>
     <a href="/app">Öppna appen</a>
     <a href="/privacy">Integritetspolicy</a>
-    <a href="/admin">Admin</a>
   </nav>
 </footer>
 </body>
