@@ -67,6 +67,16 @@ button:disabled{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none}
     {% elif unsubscribed %}
     <div class="msg ok" style="display:block">Du är nu avregistrerad och kommer inte få fler notiser.</div>
     {% else %}
+    <ul class="hint" style="margin:0 0 14px 18px;line-height:1.6">
+      <li>Automatisk bevakning dygnet runt</li>
+      <li>Notis via SMS och valfritt e‑post</li>
+      <li>Du bokar själv med BankID hos Trafikverket</li>
+      <li>Ingen bindningstid – avsluta när du vill</li>
+      <li>Betalning månadsvis, förskott</li>
+    </ul>
+    <div class="hint" style="margin-bottom:16px">
+      Läs hur vi hanterar data i <a href="/privacy">Integritetspolicyn</a>.
+    </div>
     <form id="form">
       <div class="field">
         <label for="phone">Telefonnummer</label>
