@@ -241,7 +241,7 @@ tr:hover td{background:var(--accent-bg)}
 <!-- Header -->
 <div class="hdr">
   <h1>Hitta <span class="muted">lediga</span> körkortsprov <span class="muted">automatiskt</span>.</h1>
-  <p>Logga in med BankID och välj orter och datum. Vi hittar och bokar provet åt dig.</p>
+  <p>Välj orter och datum så bevakar vi Trafikverket åt dig och meddelar när en tid dyker upp. Du bokar själv med BankID hos Trafikverket. När möjligt reserverar vi tiden kort stund.</p>
 </div>
 
 <!-- Status Bar -->
@@ -256,6 +256,7 @@ tr:hover td{background:var(--accent-bg)}
   </div>
   <div class="st-right">
     <span id="authStatus" style="font-size:.82rem;font-weight:500">Kontrollerar...</span>
+    <button class="btn btn-sm btn-go" id="loginBtn" onclick="showLogin()" style="display:none;padding:5px 12px;font-size:.78rem">Logga in</button>
     <button class="btn btn-sm btn-st" id="logoutBtn" onclick="doLogout()" style="display:none;padding:5px 12px;font-size:.78rem">Logga ut</button>
     <div class="tmr" id="tmr">00:00:00</div>
     <div id="scCnt" style="font-size:.82rem;color:var(--text3)">0 sökningar</div>
@@ -493,7 +494,7 @@ function initSmsToggle(){
 }
 
 /* ── Init ── */
-(function(){onLicenceChange();loadExistingRes();loadBookedExams();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn();loadWatch();loadLockState()})();
+(function(){onLicenceChange();loadExistingRes();checkAuth();requestNotifPermission();initSmsToggle();loadBilling();handleBillingReturn();loadWatch();loadLockState()})();
 
 /* Ask the server which controls this visitor may use. The server enforces the
    same list on /save_config, so this only drives the lock badges. */
@@ -619,9 +620,15 @@ var authPollTimer=null;
 
 function checkAuth(){
   fetch('/api/auth/check').then(function(r){return r.json()}).then(function(d){
-    if(d.authenticated){authenticated=true;hideLogin();updateAuthUI()}
-    else{showLogin()}
-  }).catch(function(){showLogin()});
+    authenticated = !!d.authenticated;
+    hideLogin();
+    updateAuthUI();
+    if (authenticated) { loadBookedExams(); }
+  }).catch(function(){
+    authenticated = false;
+    hideLogin();
+    updateAuthUI();
+  });
 }
 
 function showLogin(){
@@ -637,6 +644,7 @@ function updateAuthUI(){
   el.style.color=authenticated?'var(--green)':'var(--red)';
   document.getElementById('goBtn').disabled=!authenticated;
   document.getElementById('logoutBtn').style.display=authenticated?'inline-flex':'none';
+  document.getElementById('loginBtn').style.display=!authenticated?'inline-flex':'none';
 }
 
 function beginAuth(){
@@ -697,7 +705,7 @@ function renderQR(data){
 
 function doLogout(){
   fetch('/api/auth/logout',{method:'POST'}).then(function(){
-    authenticated=false;updateAuthUI();showLogin();showT('Utloggad');
+    authenticated=false;updateAuthUI();hideLogin();showT('Utloggad');
   });
 }
 
