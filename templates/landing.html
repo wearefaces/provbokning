@@ -5,15 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Provbokning – Hitta ledig körprovstid &amp; uppkörning automatiskt | Trafikverket-bevakning</title>
 <meta name="description" content="Slipp vänta månader på ledig provtid. Vi bevakar Trafikverket dygnet runt och hittar lediga körprov, uppkörning och kunskapsprov åt dig. SMS, e-post och webbnotis. BankID. Från 249 kr/mån, ingen bindningstid.">
-<meta name="keywords" content="körprov, uppkörning, kunskapsprov, ledig provtid, Trafikverket, börkort, B-körkort, MC-körkort, A-körkort, avbokning, provbokning, körkort Stockholm, körkort Göteborg, körkort Malmö">
+<meta name="keywords" content="körprov, uppkörning, kunskapsprov, ledig provtid, Trafikverket, körkort, B-körkort, MC-körkort, A-körkort, avbokning, provbokning, körkort Stockholm, körkort Göteborg, körkort Malmö">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="author" content="Provbokning">
-<link rel="canonical" href="https://provbok.8-229-124-88.nip.io/">
+<link rel="canonical" href="{{ site_url }}/">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="sv_SE">
 <meta property="og:title" content="Hitta ledig körprovstid automatiskt | Provbokning">
 <meta property="og:description" content="Vi bevakar Trafikverket dygnet runt och hittar lediga körprov, uppkörning och kunskapsprov åt dig. SMS, e-post, webbnotis. Från 249 kr/mån.">
-<meta property="og:url" content="https://provbok.8-229-124-88.nip.io/">
+<meta property="og:url" content="{{ site_url }}/">
 <meta property="og:site_name" content="Provbokning">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Hitta ledig körprovstid automatiskt">
@@ -22,31 +22,31 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-<!-- Structured data: Organization, WebSite, Service, FAQPage, AggregateRating -->
+<!-- Structured data: Organization, WebSite, Service, FAQPage -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@graph": [
     {
       "@type": "Organization",
-      "@id": "https://provbok.8-229-124-88.nip.io/#org",
+      "@id": "{{ site_url }}/#org",
       "name": "Provbokning",
-      "url": "https://provbok.8-229-124-88.nip.io/",
+      "url": "{{ site_url }}/",
       "description": "Automatisk bevakning av lediga körprov, uppkörning och kunskapsprov hos Trafikverket.",
       "areaServed": "SE"
     },
     {
       "@type": "WebSite",
-      "@id": "https://provbok.8-229-124-88.nip.io/#site",
-      "url": "https://provbok.8-229-124-88.nip.io/",
+      "@id": "{{ site_url }}/#site",
+      "url": "{{ site_url }}/",
       "name": "Provbokning",
       "inLanguage": "sv-SE",
-      "publisher": {"@id": "https://provbok.8-229-124-88.nip.io/#org"}
+      "publisher": {"@id": "{{ site_url }}/#org"}
     },
     {
       "@type": "Service",
       "name": "Provbokningsbevakning",
-      "provider": {"@id": "https://provbok.8-229-124-88.nip.io/#org"},
+      "provider": {"@id": "{{ site_url }}/#org"},
       "areaServed": {"@type": "Country", "name": "Sverige"},
       "serviceType": "Bevakning av lediga körprovstider hos Trafikverket",
       "offers": {
@@ -55,11 +55,6 @@
         "priceCurrency": "SEK",
         "description": "Månadsabonnemang, ingen bindningstid",
         "availability": "https://schema.org/InStock"
-      },
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "5",
-        "ratingCount": "42"
       }
     },
     {
@@ -126,7 +121,6 @@ a{color:inherit;text-decoration:none}
 .hero p.lead{margin:18px auto 28px;max-width:600px;color:var(--text2);font-size:1.05rem}
 .hero .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 .hero .trust{display:flex;justify-content:center;gap:18px;align-items:center;margin-top:22px;flex-wrap:wrap;color:var(--text3);font-size:.82rem;font-weight:500}
-.hero .trust .stars{color:#facc15;letter-spacing:1px}
 .hero .trust .sep{width:1px;height:14px;background:var(--border)}
 
 /* Hero mockup */
@@ -264,9 +258,6 @@ a{color:inherit;text-decoration:none}
     <a href="/app" class="btn btn-ghost btn-lg">Aktivera live – från 249 kr/mån <span class="arr">→</span></a>
   </div>
   <div class="trust">
-    <span class="stars">★★★★★</span>
-    <span>5 / 5 i snitt</span>
-    <span class="sep"></span>
     <span>BankID-verifiering</span>
     <span class="sep"></span>
     <span>Ingen bindningstid</span>
@@ -455,6 +446,7 @@ a{color:inherit;text-decoration:none}
       <div class="faq-item"><button class="faq-q">Funkar det på mobilen?<span class="plus">+</span></button><div class="faq-a">Ja, gränssnittet är fullt mobilanpassat. BankID öppnas direkt på samma enhet eller via QR-kod.</div></div>
       <div class="faq-item"><button class="faq-q">Hur hanteras BankID säkert?<span class="plus">+</span></button><div class="faq-a">Du autentiserar dig direkt mot Trafikverket via BankID. Vi sparar inga lösenord och din session är krypterad.</div></div>
       <div class="faq-item"><button class="faq-q">Kan jag välja flera orter och datum?<span class="plus">+</span></button><div class="faq-a">Ja, välj precis så många orter som du vill. Du kan även sätta ett datumintervall som vi söker inom.</div></div>
+      <div class="faq-item"><button class="faq-q">Vad kostar det och finns det bindningstid?<span class="plus">+</span></button><div class="faq-a">Tjänsten kostar från 249 kr/mån. Det finns ingen bindningstid — du kan avsluta när du vill.</div></div>
     </div>
   </div>
 </section>

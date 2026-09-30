@@ -56,6 +56,14 @@ if CORS is not None:
     CORS(app, resources={r"/api/*": {"origins": _cors_origins}},
          supports_credentials=True)
 
+# Public canonical origin used in SEO tags, robots.txt and sitemap.xml.
+SITE_URL = os.environ.get("SITE_URL", "https://provbok.8-229-124-88.nip.io").rstrip("/")
+
+
+@app.context_processor
+def _inject_site_url():
+    return {"site_url": SITE_URL}
+
 PROJECT_DIR = Path(__file__).parent
 # DATA_DIR can be overridden (e.g. mounted persistent volume on Fly.io).
 # Read-only seed files (valid_locations.json, location_details.json) live in
@@ -91,6 +99,7 @@ _ADMIN_ENDPOINTS = {
     "admin", "save_admin_config",
     "api_sms_test", "api_email_test", "api_ntfy_test",
     "api_subscribers_list", "api_subscribers_delete",
+    "api_admin_users",
 }
 
 
@@ -1119,15 +1128,19 @@ def robots_txt():
         "Allow: /\n"
         "Disallow: /admin\n"
         "Disallow: /api/\n"
-        f"Sitemap: {request.url_root}sitemap.xml\n"
+        "Disallow: /login\n"
+        "Disallow: /logout\n"
+        "Disallow: /test/\n"
+        "Disallow: /m/\n"
+        f"Sitemap: {SITE_URL}/sitemap.xml\n"
     )
     return Response(body, mimetype="text/plain")
 
 
 @app.route("/sitemap.xml")
 def sitemap_xml():
-    base = request.url_root.rstrip("/")
-    urls = ["/", "/app", "/subscribe"]
+    base = SITE_URL
+    urls = ["/", "/subscribe", "/privacy"]
     items = "".join(
         f"<url><loc>{base}{u}</loc><changefreq>weekly</changefreq>"
         f"<priority>{'1.0' if u == '/' else '0.8'}</priority></url>"
@@ -1540,6 +1553,39 @@ def api_unsubscribe():
 @app.route("/api/subscribers", methods=["GET"])
 def api_subscribers_list():
     return jsonify(load_subscribers())
+
+
+@app.route("/api/admin/users", methods=["GET"])
+def api_admin_users():
+    # Linked sessions copy the same payment record, so dedupe by email.
+    paying: dict[str, dict] = {}
+    for sid, entry in load_paid_sessions().items():
+        if not entry.get("paid_until"):
+            continue
+        key = entry.get("email") or entry.get("stripe_customer_id") or sid
+        prev = paying.get(key)
+        if prev and (prev["paid_until"] or "") >= entry["paid_until"]:
+            continue
+        paying[key] = {
+            "email": entry.get("email", ""),
+            "paid_until": entry["paid_until"],
+            "active": _entry_is_active(entry),
+            "source": entry.get("source", ""),
+        }
+    registered = watching = 0
+    for path in USERS_DIR.glob("*.json"):
+        registered += 1
+        try:
+            if json.loads(path.read_text()).get("config", {}).get("watch_enabled"):
+                watching += 1
+        except Exception:
+            pass
+    return jsonify({
+        "stripe_enabled": stripe_enabled(),
+        "registered": registered,
+        "watching": watching,
+        "paying": sorted(paying.values(), key=lambda p: p["paid_until"], reverse=True),
+    })
 
 
 @app.route("/api/subscribers/<sub_id>", methods=["DELETE"])

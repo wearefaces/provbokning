@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin – Provbokningsbevakning</title>
+<meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -138,6 +139,12 @@ p.hint a{background:none;padding:0;text-decoration:underline}
     <button class="btn btn-go" onclick="saveAll()" style="width:100%;padding:12px">Spara alla inställningar</button>
   </div>
 
+  <!-- Users -->
+  <div class="card">
+    <h3>Användare</h3>
+    <div id="usersList" style="font-size:.85rem;color:var(--text2)">Laddar…</div>
+  </div>
+
   <!-- Subscribers -->
   <div class="card">
     <h3>Prenumeranter <span id="subCount" style="color:var(--text3);font-weight:400"></span></h3>
@@ -225,6 +232,23 @@ async function delSub(id){
   loadSubs();
 }
 loadSubs();
+
+async function loadUsers(){
+  var el=document.getElementById('usersList');
+  try{
+    var d=await (await fetch('/api/admin/users')).json();
+    var active=d.paying.filter(function(p){return p.active}).length;
+    var html='<div style="margin-bottom:12px"><b>'+d.registered+'</b> registrerade · <b>'+d.watching+'</b> med bevakning på · <b>'+active+'</b> betalande</div>';
+    if(!d.stripe_enabled)html+='<p class="hint" style="margin-bottom:10px">Stripe är inte konfigurerat – alla användare har live-läge gratis.</p>';
+    html+=d.paying.length?d.paying.map(function(p){
+      var st=p.active?'<span style="color:var(--green)">aktiv</span>':'<span style="color:var(--text3)">utgången</span>';
+      return '<div class="sub-item"><div style="min-width:0;flex:1"><div style="font-weight:500;color:var(--text)">'+(escapeHtml(p.email)||'(ingen e-post)')+' — '+st+'</div>'
+        +'<div style="font-size:.8rem;color:var(--text2)">Betalt till '+escapeHtml((p.paid_until||'').slice(0,10))+(p.source?' · '+escapeHtml(p.source):'')+'</div></div></div>';
+    }).join(''):'<div style="color:var(--text3);font-style:italic">Inga betalande användare än.</div>';
+    el.innerHTML=html;
+  }catch(e){el.textContent='Kunde inte ladda: '+e}
+}
+loadUsers();
 </script>
 </body>
 </html>
