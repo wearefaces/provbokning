@@ -240,7 +240,7 @@ tr:hover td{background:var(--accent-bg)}
 </div>
 
 <!-- BankID Login Overlay -->
-<div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(12px)">
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(255,255,255,.92);align-items:center;justify-content:center;backdrop-filter:blur(12px)">
   <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:40px;max-width:380px;width:90%;text-align:center;box-shadow:var(--shadow-lg)">
     <img src="{{ url_for('static', filename='bankid_logo.png') }}?v=1" onerror="this.onerror=null;this.src='{{ url_for('static', filename='bankid-logo.svg') }}?v=2'" alt="BankID" style="height:44px;margin-bottom:12px">
     <h2 style="color:var(--text);margin-bottom:8px;font-size:1.2rem;font-weight:700">Logga in med BankID</h2>
@@ -275,6 +275,7 @@ tr:hover td{background:var(--accent-bg)}
   </div>
   <div class="st-right">
     <span id="authStatus" style="font-size:.82rem;font-weight:500">Kontrollerar...</span>
+    <button class="btn btn-st" id="loginBtn" onclick="showLogin()" style="display:none">Logga in</button>
     <button class="btn btn-st" id="logoutBtn" onclick="doLogout()" style="display:none">Logga ut</button>
     <div class="tmr" id="tmr">00:00:00</div>
     <div id="scCnt" style="font-size:.82rem;color:var(--text3)">0 sökningar</div>
