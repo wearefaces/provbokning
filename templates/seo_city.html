@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ page.title }}</title>
+<meta name="description" content="{{ page.description }}">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="author" content="Provbokning">
+<link rel="canonical" href="{{ site_url }}{{ page.path }}">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="sv_SE">
+<meta property="og:title" content="{{ page.og_title }}">
+<meta property="og:description" content="{{ page.description }}">
+<meta property="og:url" content="{{ site_url }}{{ page.path }}">
+<meta property="og:site_name" content="Provbokning">
+<meta property="og:image" content="{{ site_url }}/static/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ page.og_title }}">
+<meta name="twitter:description" content="{{ page.description }}">
+<meta name="twitter:image" content="{{ site_url }}/static/og-image.png">
+<meta name="theme-color" content="#111827">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "@id": "{{ site_url }}{{ page.path }}#page",
+      "url": "{{ site_url }}{{ page.path }}",
+      "name": "{{ page.og_title }}",
+      "description": "{{ page.description }}",
+      "isPartOf": {"@id": "{{ site_url }}/#site"},
+      "about": {"@type": "Place", "name": "{{ page.city }}"}
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {% for item in page.faq %}
+        {"@type":"Question","name":{{ item.q|tojson }},"acceptedAnswer":{"@type":"Answer","text":{{ item.a|tojson }}}}{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
+    },
+    {
+      "@type": "Service",
+      "name": "Provbokningsbevakning – {{ page.city }}",
+      "provider": {"@type":"Organization","name":"Provbokning","url":"{{ site_url }}/"},
+      "areaServed": {"@type":"City","name":"{{ page.city }}"},
+      "serviceType": "Bevakning av lediga körprovstider hos Trafikverket",
+      "offers": {"@type":"Offer","price":"249","priceCurrency":"SEK","description":"Månadsabonnemang, ingen bindningstid"}
+    }
+  ]
+}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f5f7;--card:#fff;--card2:#eef0f3;--border:#e2e5e9;
+  --ink:#0e1419;--ink2:#1f2933;
+  --brand:#01d27b;--brand-ink:#047a4a;--brand-bg:#e7f8ef;--brand-line:#bdebd3;
+  --text:#0e1419;--text2:#4a5563;--text3:#6b7480;
+  --shadow-lg:0 24px 60px -16px rgba(14,20,25,.18);
+  --radius:16px;
+  --display:'Outfit',system-ui,-apple-system,sans-serif;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;line-height:1.6}
+h1,h2,h3{font-family:var(--display);text-wrap:balance}
+p{text-wrap:pretty}
+.wrap{max-width:800px;margin:0 auto;padding:0 24px}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--brand-ink);outline-offset:3px;border-radius:6px}
+.nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(244,245,247,.86);border-bottom:1px solid var(--border)}
+.nav-row{display:flex;align-items:center;gap:24px;height:68px}
+.brand img{height:28px;width:auto;display:block}
+.nav-cta{margin-left:auto;display:flex;gap:10px;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 22px;border:1px solid transparent;border-radius:999px;font:inherit;font-weight:600;font-size:.92rem;white-space:nowrap;cursor:pointer;transition:background-color .2s,border-color .2s,box-shadow .2s,transform .2s}
+.btn:active{transform:translateY(1px) scale(.98)}
+.btn-primary{background:var(--ink);color:#fff}
+.btn-primary:hover{background:var(--ink2);box-shadow:0 10px 24px -10px rgba(14,20,25,.5)}
+.btn-ghost{background:transparent;color:var(--text);border-color:#d3d7dd}
+.btn-ghost:hover{background:var(--card);border-color:var(--border)}
+.btn-lg{padding:14px 26px;font-size:.98rem}
+.btn .arr{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--brand);color:var(--ink);align-items:center;justify-content:center;font-size:.8rem}
+.hero{padding:56px 0 28px}
+.kicker{display:inline-block;font-size:.84rem;font-weight:600;color:var(--brand-ink);background:var(--brand-bg);padding:6px 14px;border-radius:999px;margin-bottom:18px}
+.hero h1{font-size:clamp(1.9rem,4vw,2.7rem);font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.hero h1 .muted{color:var(--text3);font-weight:600}
+.lead{margin:18px 0 28px;color:var(--text2);font-size:1.05rem;max-width:58ch}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap}
+.trust{display:flex;flex-wrap:wrap;gap:10px 24px;padding:18px 0 8px;color:var(--text2);font-size:.9rem;font-weight:500;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:8px 0 36px}
+.trust span::before{content:"✓";color:var(--brand-ink);font-weight:700;margin-right:8px}
+.section{padding:36px 0}
+.section h2{font-size:clamp(1.35rem,2.8vw,1.75rem);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin-bottom:14px}
+.section p,.section li{color:var(--text2);font-size:1rem}
+.section p+p{margin-top:12px}
+.section ul{margin:12px 0 0;padding-left:1.2em;display:grid;gap:8px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;margin-top:8px}
+.price-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:8px 0 18px}
+.price{font-family:var(--display);font-size:2.4rem;font-weight:700;letter-spacing:-.03em}
+.price .per{font-family:'Inter',system-ui,sans-serif;font-size:1rem;font-weight:500;color:var(--text3)}
+.faq{display:grid;gap:22px;margin-top:8px}
+.faq h3{font-size:1.05rem;font-weight:600;margin-bottom:6px}
+.faq p{color:var(--text2);font-size:.96rem}
+.links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.links a{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:8px 16px;font-size:.9rem;font-weight:500;color:var(--text2)}
+.links a:hover{background:var(--brand-bg);border-color:var(--brand-line);color:var(--brand-ink)}
+.final{margin:40px 0 24px;background:var(--brand-bg);border:1px solid var(--brand-line);border-radius:20px;padding:32px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.final h2{font-size:clamp(1.35rem,2.5vw,1.7rem);font-weight:700;letter-spacing:-.02em;max-width:22ch}
+.final p{margin-top:8px;color:var(--text2);max-width:48ch;font-size:.95rem}
+.footer{margin:48px auto 0;padding:24px 24px 40px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;color:var(--text3);font-size:.88rem;max-width:800px}
+.footer nav{display:flex;flex-wrap:wrap;gap:18px}
+.footer a:hover{color:var(--text)}
+@media(max-width:560px){.nav-row{height:60px}.brand img{height:24px}.btn{padding:9px 14px;font-size:.85rem}.final{padding:24px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<nav class="nav" aria-label="Huvudmeny">
+  <div class="wrap nav-row">
+    <a href="/" class="brand"><img src="/static/logo.png" alt="Provbokning" width="162" height="28"></a>
+    <div class="nav-cta">
+      <a href="/app" class="btn btn-ghost">Prova gratis</a>
+      <a href="/subscribe" class="btn btn-primary">Aktivera live <span class="arr" aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <header class="hero">
+    <span class="kicker">{{ page.kicker }}</span>
+    <h1>{{ page.h1_html|safe }}</h1>
+    <p class="lead">{{ page.lead }}</p>
+    <div class="cta-row">
+      <a href="/app" class="btn btn-primary btn-lg">Prova gratis <span class="arr" aria-hidden="true">→</span></a>
+      <a href="/subscribe" class="btn btn-ghost btn-lg">Aktivera live — 249 kr/mån</a>
+    </div>
+  </header>
+
+  <div class="trust" aria-label="Trygghet">
+    <span>BankID direkt mot Trafikverket</span>
+    <span>Vi meddelar — du bokar</span>
+    <span>249 kr/mån · ingen bindningstid</span>
+    <span>Stripe</span>
+  </div>
+
+  <section class="section" aria-labelledby="problem">
+    <h2 id="problem">{{ page.problem_h2 }}</h2>
+    {% for p in page.problem_paras %}
+    <p>{{ p }}</p>
+    {% endfor %}
+  </section>
+
+  <section class="section" aria-labelledby="how">
+    <h2 id="how">Så fungerar bevakningen</h2>
+    <p>Provbokning är <strong>alert-first</strong>: vi bevakar Trafikverket åt dig och meddelar när en tid matchar dina inställningar. Du bokar själv med BankID hos Trafikverket.</p>
+    <ul>
+      <li>Välj ort(er), datumintervall, behörighet och provtyp i appen.</li>
+      <li>Vi söker dygnet runt efter matchande lediga tider.</li>
+      <li>Du får notis via SMS, e-post och webb — sedan loggar du in med BankID och bokar.</li>
+    </ul>
+  </section>
+
+  <section class="section" aria-labelledby="trust">
+    <h2 id="trust">BankID och trygghet</h2>
+    <p>Du autentiserar dig direkt mot Trafikverket via BankID. Vi sparar inga lösenord. Bokningen sker hos Trafikverket — vi håller dig informerad så du hinner agera.</p>
+  </section>
+
+  <section class="section" aria-labelledby="pris">
+    <h2 id="pris">Pris</h2>
+    <div class="card">
+      <div class="price-row">
+        <div class="price">249 kr<span class="per"> /månad</span></div>
+      </div>
+      <p>Ingen bindningstid. Avsluta när du vill. Betalning via Stripe. Demo på <a href="/app" style="text-decoration:underline">/app</a> är gratis; livebevaking aktiveras via <a href="/subscribe" style="text-decoration:underline">/subscribe</a>.</p>
+      <div class="cta-row" style="margin-top:18px">
+        <a href="/app" class="btn btn-primary">Prova gratis <span class="arr" aria-hidden="true">→</span></a>
+        <a href="/subscribe" class="btn btn-ghost">Aktivera live</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="faq">
+    <h2 id="faq">Vanliga frågor — {{ page.city }}</h2>
+    <div class="faq">
+      {% for item in page.faq %}
+      <div>
+        <h3>{{ item.q }}</h3>
+        <p>{{ item.a }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="more">
+    <h2 id="more">Fler sidor</h2>
+    <div class="links">
+      {% for link in page.related %}
+      <a href="{{ link.href }}">{{ link.label }}</a>
+      {% endfor %}
+      <a href="/">Startsida</a>
+      <a href="/bevakning-vs-f5">Bevakning vs F5</a>
+    </div>
+  </section>
+
+  <section class="final">
+    <div>
+      <h2>Prova demo — aktivera live när du vill.</h2>
+      <p>Utforska appen gratis. När du vill ha automatiska notiser aktiverar du live för 249 kr/mån. Du bokar alltid själv med BankID.</p>
+    </div>
+    <div class="cta-row">
+      <a href="/app" class="btn btn-primary btn-lg">Prova gratis <span class="arr" aria-hidden="true">→</span></a>
+      <a href="/subscribe" class="btn btn-ghost btn-lg">Aktivera live</a>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div>© 2026 Provbokningsbevakning</div>
+  <nav aria-label="Sidfot">
+    <a href="/">Startsida</a>
+    <a href="/subscribe">Anmäl dig</a>
+    <a href="/app">Öppna appen</a>
+    <a href="/privacy">Integritetspolicy</a>
+  </nav>
+</footer>
+</body>
+</html>

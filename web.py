@@ -1079,6 +1079,112 @@ def privacy():
     return render_template("privacy.html", updated=date.today().isoformat())
 
 
+
+# ── SEO city / comparison landing pages (Experiment 2) ──
+
+_SEO_CITY_PAGES = {
+    "stockholm": {
+        "path": "/stockholm",
+        "city": "Stockholm",
+        "title": "Lediga uppkörningstider Stockholm | Provbokning",
+        "og_title": "Lediga uppkörningstider Stockholm",
+        "description": "Bevaka lediga körprov och uppkörningstider i Stockholm. Vi meddelar dig — du bokar med BankID hos Trafikverket. 249 kr/mån, ingen bindningstid. Prova gratis.",
+        "kicker": "Stockholm & närliggande orter",
+        "h1_html": 'Lediga <span class="muted">uppkörningstider</span> i Stockholm.',
+        "lead": "I Stockholm är efterfrågan hög och avbokade tider försvinner fort. Provbokning bevakar Trafikverket dygnet runt och meddelar dig — du bokar själv med BankID. Prova gratis i demoläge, aktivera live när du vill ha notiser.",
+        "problem_h2": "Varför är det svårt i Stockholm?",
+        "problem_paras": [
+            "Stockholmsområdet har många provorter och hög konkurrens om tider. När någon avbokar kan platsen vara borta innan du hunnit uppdatera sidan.",
+            "Manuell F5-jakt tar tid och fungerar bara när du sitter och tittar. Automatisk bevakning söker även när du sover eller jobbar — du får en notis och bokar med BankID.",
+        ],
+        "faq": [
+            {"q": "Vilka orter i Stockholm kan jag bevaka?", "a": "Du väljer bland Trafikverkets provorter i appen — till exempel tätorter i Stockholmsområdet och andra orter du kan tänka dig att åka till. Fler orter ger fler chanser."},
+            {"q": "Bokar ni tiden åt mig?", "a": "Nej. Vi meddelar dig när en match hittas. Du loggar in med BankID mot Trafikverket och slutför bokningen själv."},
+            {"q": "Vad kostar det?", "a": "249 kr/mån via Stripe. Ingen bindningstid. Demo på /app är gratis; live aktiveras via /subscribe."},
+            {"q": "Hur snabbt hittar ni en tid i Stockholm?", "a": "Det går inte att lova. Avbokningar dyker upp oregelbundet. Vi bevakar och meddelar så fort en tid matchar dina filter — hur snabbt det går beror på efterfrågan och hur flexibel du är."},
+        ],
+        "related": [
+            {"href": "/goteborg", "label": "Göteborg"},
+            {"href": "/malmo", "label": "Malmö"},
+        ],
+    },
+    "goteborg": {
+        "path": "/goteborg",
+        "city": "Göteborg",
+        "title": "Lediga uppkörningstider Göteborg | Provbokning",
+        "og_title": "Lediga uppkörningstider Göteborg",
+        "description": "Bevaka lediga körprov och uppkörningstider i Göteborg. Vi meddelar dig — du bokar med BankID hos Trafikverket. 249 kr/mån, ingen bindningstid. Prova gratis.",
+        "kicker": "Göteborg & Västsverige",
+        "h1_html": 'Lediga <span class="muted">uppkörningstider</span> i Göteborg.',
+        "lead": "I Göteborg och omkringliggande orter tar lediga körprovstider slut snabbt. Vi bevakar Trafikverket åt dig och skickar notis — du bokar själv med BankID. Prova appen gratis, aktivera live för 249 kr/mån utan bindningstid.",
+        "problem_h2": "Varför är det svårt i Göteborg?",
+        "problem_paras": [
+            "Många sökande i Västsverige jagar samma luckor. En avbokning kan synas bara en kort stund innan någon annan tar den.",
+            "I stället för att sitta och uppdatera Trafikverkets sida kan du låta bevakningen köra i bakgrunden. När något matchar dina filter får du SMS, e-post eller webbnotis.",
+        ],
+        "faq": [
+            {"q": "Kan jag bevaka Göteborg plus andra orter?", "a": "Ja. Välj så många orter du vill i appen. Ju fler orter, desto fler möjliga träffar."},
+            {"q": "Behöver jag ha datorn igång?", "a": "Nej. Bevakningen körs på vår server. Du får notis även om appen är stängd."},
+            {"q": "Är inloggningen säker?", "a": "Du autentiserar dig direkt mot Trafikverket via BankID. Vi sparar inga lösenord."},
+            {"q": "Finns det bindningstid?", "a": "Nej. 249 kr/mån via Stripe. Avsluta när du vill."},
+        ],
+        "related": [
+            {"href": "/stockholm", "label": "Stockholm"},
+            {"href": "/malmo", "label": "Malmö"},
+        ],
+    },
+    "malmo": {
+        "path": "/malmo",
+        "city": "Malmö",
+        "title": "Lediga uppkörningstider Malmö | Provbokning",
+        "og_title": "Lediga uppkörningstider Malmö",
+        "description": "Bevaka lediga körprov och uppkörningstider i Malmö. Vi meddelar dig — du bokar med BankID hos Trafikverket. 249 kr/mån, ingen bindningstid. Prova gratis.",
+        "kicker": "Malmö & Skåne",
+        "h1_html": 'Lediga <span class="muted">uppkörningstider</span> i Malmö.',
+        "lead": "I Malmö och Skåne är det ofta hård kamp om lediga körprovstider. Provbokning bevakar Trafikverket och meddelar dig — du bokar själv med BankID. Prova gratis i demoläge; live kostar 249 kr/mån utan bindningstid.",
+        "problem_h2": "Varför är det svårt i Malmö?",
+        "problem_paras": [
+            "Skåne har flera populära provorter. När en tid släpps eller avbokas kan den försvinna innan du hunnit öppna sidan igen.",
+            "Automatisk bevakning minskar behovet av manuell F5. Du ställer in filter en gång; vi söker vidare och säger till när något dyker upp.",
+        ],
+        "faq": [
+            {"q": "Vilka provtyper stöds?", "a": "Körprov (uppkörning) och kunskapsprov, för behörigheter som B och MC (A, A1, A2) — du väljer i appen."},
+            {"q": "Bokar ni åt mig?", "a": "Nej. Alert-first: vi meddelar, du bokar med BankID hos Trafikverket."},
+            {"q": "Vad ingår för 249 kr/mån?", "a": "Automatisk bevakning, notiser via SMS/e-post/webb, och möjlighet att söka på flera orter. Ingen bindningstid."},
+            {"q": "Kan jag testa innan jag betalar?", "a": "Ja. Demo på /app är gratis. Live aktiveras via /subscribe när du vill ha automatiska notiser."},
+        ],
+        "related": [
+            {"href": "/stockholm", "label": "Stockholm"},
+            {"href": "/goteborg", "label": "Göteborg"},
+        ],
+    },
+}
+
+
+@app.route("/stockholm")
+@app.route("/stockholm/")
+def seo_stockholm():
+    return render_template("seo_city.html", page=_SEO_CITY_PAGES["stockholm"])
+
+
+@app.route("/goteborg")
+@app.route("/goteborg/")
+def seo_goteborg():
+    return render_template("seo_city.html", page=_SEO_CITY_PAGES["goteborg"])
+
+
+@app.route("/malmo")
+@app.route("/malmo/")
+def seo_malmo():
+    return render_template("seo_city.html", page=_SEO_CITY_PAGES["malmo"])
+
+
+@app.route("/bevakning-vs-f5")
+@app.route("/bevakning-vs-f5/")
+def seo_bevakning_vs_f5():
+    return render_template("bevakning_vs_f5.html")
+
+
 @app.route("/app")
 def app_page():
     config = load_config()
@@ -1145,7 +1251,7 @@ def robots_txt():
 @app.route("/sitemap.xml")
 def sitemap_xml():
     base = SITE_URL
-    urls = ["/", "/subscribe", "/privacy"]
+    urls = ["/", "/subscribe", "/privacy", "/stockholm", "/goteborg", "/malmo", "/bevakning-vs-f5"]
     items = "".join(
         f"<url><loc>{base}{u}</loc><changefreq>weekly</changefreq>"
         f"<priority>{'1.0' if u == '/' else '0.8'}</priority></url>"
@@ -1218,6 +1324,16 @@ def api_subscribe():
     # If Stripe is configured, create a Checkout Session and return its URL
     if stripe_enabled():
         try:
+            # Funnel: started subscription from public subscribe page
+            try:
+                log_activity({
+                    "type": "funnel",
+                    "name": "subscribe_start",
+                    "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "source": "public_subscribe"
+                })
+            except Exception:
+                pass
             base = request.host_url.rstrip("/")
             customer_email = email or None
             cs = _stripe.checkout.Session.create(
@@ -1328,6 +1444,16 @@ def api_billing_checkout():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower() or None
     try:
+        # Funnel: started in-app subscription
+        try:
+            log_activity({
+                "type": "funnel",
+                "name": "subscribe_start",
+                "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "source": "in_app"
+            })
+        except Exception:
+            pass
         base = request.host_url.rstrip("/")
         cs = _stripe.checkout.Session.create(
             mode="subscription",
@@ -1392,6 +1518,15 @@ def api_billing_iap_unlock():
         "IAP unlock: sid=%s platform=%s product=%s tx=%s days=%d receipt_len=%d",
         sid, platform, product_id, transaction_id, days, len(receipt),
     )
+    try:
+        log_activity({
+            "type": "funnel",
+            "name": "paid",
+            "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "source": f"{platform}_iap"
+        })
+    except Exception:
+        pass
     entry = load_paid_sessions().get(sid, {}) or {}
     return jsonify({
         "ok": True,
@@ -1441,6 +1576,15 @@ def billing_thanks():
                     email=cust_email,
                     source="stripe",
                 )
+                try:
+                    log_activity({
+                        "type": "funnel",
+                        "name": "paid",
+                        "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                        "source": "stripe"
+                    })
+                except Exception:
+                    pass
                 app.logger.info("billing/thanks: marked sid=%s as paid (email=%s)", ref[4:], cust_email or "-")
             else:
                 app.logger.warning(
@@ -1783,6 +1927,15 @@ def auth_begin():
     ctx = _tv_ctx()
     tv_session, auth_state = ctx["session"], ctx["auth"]
     with ctx["lock"]:
+        # Funnel: BankID login flow started
+        try:
+            log_activity({
+                "type": "funnel",
+                "name": "bankid_start",
+                "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            })
+        except Exception:
+            pass
         _init_tv_session(tv_session)
         try:
             r = tv_session.post(TV_BASE + "/begin-authentication", json=None, timeout=15)
@@ -2261,10 +2414,15 @@ def api_scan():
         return jsonify({"ok": True, "locked": False, "times": slots,
                         "added": slots, "removed": [], "auto_claim": None})
     ctx = _tv_ctx()
-    if not ctx["auth"]["authenticated"]:
-        return jsonify({"ok": False, "error": "Not authenticated"}), 401
     sid = _current_sid()
     paid = _sid_is_paid(sid)
+    # Allow unauthenticated scans in demo (unpaid) so users can try the app
+    # without BankID. Paid users still require BankID for full, live results.
+    if not ctx["auth"]["authenticated"]:
+        if paid:
+            return jsonify({"ok": False, "error": "Not authenticated"}), 401
+        # Ensure CSRF/session cookies exist before hitting Trafikverket
+        _init_tv_session(ctx["session"])
     if not paid:
         cached = _free_scan_throttled(sid)
         if cached is not None:
@@ -2844,6 +3002,26 @@ def api_activity_log():
     """Return recent activity log entries."""
     log = load_activity_log()
     return jsonify(log[-50:])
+
+@app.route("/api/funnel", methods=["POST"])
+def api_funnel_event():
+    """Record a lightweight funnel event on the caller's session.
+    Intended for minimal measurement without third-party analytics."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    # Only accept the minimum required events client-side; the rest are logged server-side.
+    allowed = {"demo_start", "setup_complete"}
+    if name not in allowed:
+        return jsonify({"ok": False, "error": "unknown_event"}), 400
+    try:
+        log_activity({
+            "type": "funnel",
+            "name": name,
+            "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        })
+    except Exception:
+        pass
+    return jsonify({"ok": True})
 
 
 @app.route("/known_locations")

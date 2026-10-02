@@ -240,7 +240,7 @@ tr:hover td{background:var(--accent-bg)}
 </div>
 
 <!-- BankID Login Overlay -->
-<div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(12px)">
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(255,255,255,.92);align-items:center;justify-content:center;backdrop-filter:blur(12px)">
   <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:40px;max-width:380px;width:90%;text-align:center;box-shadow:var(--shadow-lg)">
     <img src="{{ url_for('static', filename='bankid_logo.png') }}?v=1" onerror="this.onerror=null;this.src='{{ url_for('static', filename='bankid-logo.svg') }}?v=2'" alt="BankID" style="height:44px;margin-bottom:12px">
     <h2 style="color:var(--text);margin-bottom:8px;font-size:1.2rem;font-weight:700">Logga in med BankID</h2>
@@ -275,6 +275,7 @@ tr:hover td{background:var(--accent-bg)}
   </div>
   <div class="st-right">
     <span id="authStatus" style="font-size:.82rem;font-weight:500">Kontrollerar...</span>
+    <button class="btn btn-st" id="loginBtn" onclick="showLogin()" style="display:none">Logga in</button>
     <button class="btn btn-st" id="logoutBtn" onclick="doLogout()" style="display:none">Logga ut</button>
     <div class="tmr" id="tmr">00:00:00</div>
     <div id="scCnt" style="font-size:.82rem;color:var(--text3)">0 sökningar</div>
@@ -520,6 +521,10 @@ function loadLockState(){
       if(Array.isArray(d.locations)){selLocs=d.locations.slice();renderLocBrowser();renderSelBar()}
       if(d.date_from)document.getElementById('dtFrom').value=d.date_from;
       if(d.date_to)document.getElementById('dtTo').value=d.date_to;
+      if(!window.__demoStartSent){
+        window.__demoStartSent=true;
+        fetch('/api/funnel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'demo_start'})}).catch(function(){});
+      }
     }
     applyLocks();
   }).catch(function(){});
@@ -632,14 +637,16 @@ var authPollTimer=null;
 
 function checkAuth(){
   fetch('/api/auth/check').then(function(r){return r.json()}).then(function(d){
-    if(d.authenticated){authenticated=true;hideLogin();updateAuthUI()}
-    else{showLogin()}
-  }).catch(function(){showLogin()});
+    authenticated=!!d.authenticated;
+    if(authenticated){hideLogin()}
+    updateAuthUI();
+  }).catch(function(){
+    authenticated=false;updateAuthUI();
+  });
 }
 
 function showLogin(){
   document.getElementById('loginOverlay').style.display='flex';
-  document.getElementById('goBtn').disabled=true;
 }
 function hideLogin(){
   document.getElementById('loginOverlay').style.display='none';
@@ -648,8 +655,8 @@ function updateAuthUI(){
   var el=document.getElementById('authStatus');
   el.textContent=authenticated?'Inloggad':'Ej inloggad';
   el.style.color=authenticated?'var(--green)':'var(--red)';
-  document.getElementById('goBtn').disabled=!authenticated;
   document.getElementById('logoutBtn').style.display=authenticated?'inline-flex':'none';
+  var lb=document.getElementById('loginBtn');if(lb)lb.style.display=!authenticated?'inline-flex':'none';
 }
 
 function beginAuth(){
@@ -795,12 +802,15 @@ function saveCfg(){
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
     locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,
     sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value
-  })});
+  })}).then(function(r){return r.json()}).then(function(){
+    if(!paidUnlocked){
+      fetch('/api/funnel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'setup_complete'})}).catch(function(){});
+    }
+  });
 }
 
 /* ── Scanner (server-side) ── */
 async function startScanner(){
-  if(!authenticated){showT('Du måste logga in med BankID först!',true);return}
   var ssn=document.getElementById('ssn').value.trim();
   if(!ssn){showT('Fyll i personnummer!',true);return}
   await saveCfg();
@@ -994,7 +1004,7 @@ function updUI(st){
   document.getElementById('stDot').className='st-dot '+(st==='on'?'on':'off');
   document.getElementById('stTxt').textContent=st==='on'?'Söker aktivt':'Stoppad';
   updWatchTxt();
-  document.getElementById('goBtn').disabled=st==='on'||!authenticated;document.getElementById('stBtn').disabled=st!=='on';
+  document.getElementById('goBtn').disabled=st==='on';document.getElementById('stBtn').disabled=st!=='on';
 }
 
 /* ── Reservations ── */
