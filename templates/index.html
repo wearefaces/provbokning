@@ -520,6 +520,10 @@ function loadLockState(){
       if(Array.isArray(d.locations)){selLocs=d.locations.slice();renderLocBrowser();renderSelBar()}
       if(d.date_from)document.getElementById('dtFrom').value=d.date_from;
       if(d.date_to)document.getElementById('dtTo').value=d.date_to;
+      if(!window.__demoStartSent){
+        window.__demoStartSent=true;
+        fetch('/api/funnel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'demo_start'})}).catch(function(){});
+      }
     }
     applyLocks();
   }).catch(function(){});
@@ -632,14 +636,16 @@ var authPollTimer=null;
 
 function checkAuth(){
   fetch('/api/auth/check').then(function(r){return r.json()}).then(function(d){
-    if(d.authenticated){authenticated=true;hideLogin();updateAuthUI()}
-    else{showLogin()}
-  }).catch(function(){showLogin()});
+    authenticated=!!d.authenticated;
+    if(authenticated){hideLogin()}
+    updateAuthUI();
+  }).catch(function(){
+    authenticated=false;updateAuthUI();
+  });
 }
 
 function showLogin(){
   document.getElementById('loginOverlay').style.display='flex';
-  document.getElementById('goBtn').disabled=true;
 }
 function hideLogin(){
   document.getElementById('loginOverlay').style.display='none';
@@ -648,8 +654,8 @@ function updateAuthUI(){
   var el=document.getElementById('authStatus');
   el.textContent=authenticated?'Inloggad':'Ej inloggad';
   el.style.color=authenticated?'var(--green)':'var(--red)';
-  document.getElementById('goBtn').disabled=!authenticated;
   document.getElementById('logoutBtn').style.display=authenticated?'inline-flex':'none';
+  var lb=document.getElementById('loginBtn');if(lb)lb.style.display=!authenticated?'inline-flex':'none';
 }
 
 function beginAuth(){
@@ -795,12 +801,15 @@ function saveCfg(){
     swedish_ssn:document.getElementById('ssn').value,licence_type:document.getElementById('licenceType').value,exam_type:document.getElementById('examType').value,
     locations:selLocs,date_from:document.getElementById('dtFrom').value,date_to:document.getElementById('dtTo').value,
     sms_enabled:document.getElementById('smsEnabled').checked,sms_to:document.getElementById('smsTo').value
-  })});
+  })}).then(function(r){return r.json()}).then(function(){
+    if(!paidUnlocked){
+      fetch('/api/funnel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'setup_complete'})}).catch(function(){});
+    }
+  });
 }
 
 /* ── Scanner (server-side) ── */
 async function startScanner(){
-  if(!authenticated){showT('Du måste logga in med BankID först!',true);return}
   var ssn=document.getElementById('ssn').value.trim();
   if(!ssn){showT('Fyll i personnummer!',true);return}
   await saveCfg();
@@ -994,7 +1003,7 @@ function updUI(st){
   document.getElementById('stDot').className='st-dot '+(st==='on'?'on':'off');
   document.getElementById('stTxt').textContent=st==='on'?'Söker aktivt':'Stoppad';
   updWatchTxt();
-  document.getElementById('goBtn').disabled=st==='on'||!authenticated;document.getElementById('stBtn').disabled=st!=='on';
+  document.getElementById('goBtn').disabled=st==='on';document.getElementById('stBtn').disabled=st!=='on';
 }
 
 /* ── Reservations ── */

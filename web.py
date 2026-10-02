@@ -1324,6 +1324,16 @@ def api_subscribe():
     # If Stripe is configured, create a Checkout Session and return its URL
     if stripe_enabled():
         try:
+            # Funnel: started subscription from public subscribe page
+            try:
+                log_activity({
+                    "type": "funnel",
+                    "name": "subscribe_start",
+                    "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "source": "public_subscribe"
+                })
+            except Exception:
+                pass
             base = request.host_url.rstrip("/")
             customer_email = email or None
             cs = _stripe.checkout.Session.create(
@@ -1434,6 +1444,16 @@ def api_billing_checkout():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower() or None
     try:
+        # Funnel: started in-app subscription
+        try:
+            log_activity({
+                "type": "funnel",
+                "name": "subscribe_start",
+                "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "source": "in_app"
+            })
+        except Exception:
+            pass
         base = request.host_url.rstrip("/")
         cs = _stripe.checkout.Session.create(
             mode="subscription",
@@ -1498,6 +1518,15 @@ def api_billing_iap_unlock():
         "IAP unlock: sid=%s platform=%s product=%s tx=%s days=%d receipt_len=%d",
         sid, platform, product_id, transaction_id, days, len(receipt),
     )
+    try:
+        log_activity({
+            "type": "funnel",
+            "name": "paid",
+            "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "source": f"{platform}_iap"
+        })
+    except Exception:
+        pass
     entry = load_paid_sessions().get(sid, {}) or {}
     return jsonify({
         "ok": True,
@@ -1547,6 +1576,15 @@ def billing_thanks():
                     email=cust_email,
                     source="stripe",
                 )
+                try:
+                    log_activity({
+                        "type": "funnel",
+                        "name": "paid",
+                        "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                        "source": "stripe"
+                    })
+                except Exception:
+                    pass
                 app.logger.info("billing/thanks: marked sid=%s as paid (email=%s)", ref[4:], cust_email or "-")
             else:
                 app.logger.warning(
@@ -1889,6 +1927,15 @@ def auth_begin():
     ctx = _tv_ctx()
     tv_session, auth_state = ctx["session"], ctx["auth"]
     with ctx["lock"]:
+        # Funnel: BankID login flow started
+        try:
+            log_activity({
+                "type": "funnel",
+                "name": "bankid_start",
+                "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            })
+        except Exception:
+            pass
         _init_tv_session(tv_session)
         try:
             r = tv_session.post(TV_BASE + "/begin-authentication", json=None, timeout=15)
@@ -2367,10 +2414,15 @@ def api_scan():
         return jsonify({"ok": True, "locked": False, "times": slots,
                         "added": slots, "removed": [], "auto_claim": None})
     ctx = _tv_ctx()
-    if not ctx["auth"]["authenticated"]:
-        return jsonify({"ok": False, "error": "Not authenticated"}), 401
     sid = _current_sid()
     paid = _sid_is_paid(sid)
+    # Allow unauthenticated scans in demo (unpaid) so users can try the app
+    # without BankID. Paid users still require BankID for full, live results.
+    if not ctx["auth"]["authenticated"]:
+        if paid:
+            return jsonify({"ok": False, "error": "Not authenticated"}), 401
+        # Ensure CSRF/session cookies exist before hitting Trafikverket
+        _init_tv_session(ctx["session"])
     if not paid:
         cached = _free_scan_throttled(sid)
         if cached is not None:
@@ -2950,6 +3002,26 @@ def api_activity_log():
     """Return recent activity log entries."""
     log = load_activity_log()
     return jsonify(log[-50:])
+
+@app.route("/api/funnel", methods=["POST"])
+def api_funnel_event():
+    """Record a lightweight funnel event on the caller's session.
+    Intended for minimal measurement without third-party analytics."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    # Only accept the minimum required events client-side; the rest are logged server-side.
+    allowed = {"demo_start", "setup_complete"}
+    if name not in allowed:
+        return jsonify({"ok": False, "error": "unknown_event"}), 400
+    try:
+        log_activity({
+            "type": "funnel",
+            "name": name,
+            "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        })
+    except Exception:
+        pass
+    return jsonify({"ok": True})
 
 
 @app.route("/known_locations")
