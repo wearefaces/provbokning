@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manuell F5 vs automatisk bevakning av körprov | Provbokning</title>
+<meta name="description" content="Jämför manuell uppdatering (F5) av Trafikverket med automatisk bevakning. Vi meddelar dig — du bokar själv med BankID. 249 kr/mån, ingen bindningstid.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="author" content="Provbokning">
+<link rel="canonical" href="{{ site_url }}/bevakning-vs-f5">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="sv_SE">
+<meta property="og:title" content="Manuell F5 vs automatisk bevakning | Provbokning">
+<meta property="og:description" content="Jämför manuell uppdatering av Trafikverket med automatisk bevakning. Vi meddelar — du bokar med BankID.">
+<meta property="og:url" content="{{ site_url }}/bevakning-vs-f5">
+<meta property="og:site_name" content="Provbokning">
+<meta property="og:image" content="{{ site_url }}/static/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Manuell F5 vs automatisk bevakning">
+<meta name="twitter:description" content="Jämför manuell F5 med automatisk bevakning av lediga körprovstider.">
+<meta name="twitter:image" content="{{ site_url }}/static/og-image.png">
+<meta name="theme-color" content="#111827">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Manuell F5 vs automatisk bevakning",
+  "url": "{{ site_url }}/bevakning-vs-f5",
+  "description": "Jämförelse mellan manuell uppdatering av Trafikverkets sida och automatisk bevakning av lediga körprovstider.",
+  "isPartOf": {"@type":"WebSite","name":"Provbokning","url":"{{ site_url }}/"}
+}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f5f7;--card:#fff;--border:#e2e5e9;
+  --ink:#0e1419;--ink2:#1f2933;
+  --brand:#01d27b;--brand-ink:#047a4a;--brand-bg:#e7f8ef;--brand-line:#bdebd3;
+  --text:#0e1419;--text2:#4a5563;--text3:#6b7480;
+  --display:'Outfit',system-ui,-apple-system,sans-serif;
+}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;line-height:1.6}
+h1,h2,h3{font-family:var(--display);text-wrap:balance}
+.wrap{max-width:840px;margin:0 auto;padding:0 24px}
+a{color:inherit;text-decoration:none}
+.nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);background:rgba(244,245,247,.86);border-bottom:1px solid var(--border)}
+.nav-row{display:flex;align-items:center;gap:24px;height:68px}
+.brand img{height:28px;width:auto;display:block}
+.nav-cta{margin-left:auto;display:flex;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 22px;border:1px solid transparent;border-radius:999px;font:inherit;font-weight:600;font-size:.92rem;white-space:nowrap;cursor:pointer}
+.btn-primary{background:var(--ink);color:#fff}
+.btn-ghost{background:transparent;color:var(--text);border-color:#d3d7dd}
+.btn-lg{padding:14px 26px}
+.btn .arr{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--brand);color:var(--ink);align-items:center;justify-content:center;font-size:.8rem}
+.hero{padding:56px 0 28px}
+.kicker{display:inline-block;font-size:.84rem;font-weight:600;color:var(--brand-ink);background:var(--brand-bg);padding:6px 14px;border-radius:999px;margin-bottom:18px}
+.hero h1{font-size:clamp(1.9rem,4vw,2.7rem);font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.hero h1 .muted{color:var(--text3);font-weight:600}
+.lead{margin:18px 0 28px;color:var(--text2);font-size:1.05rem;max-width:60ch}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap}
+.section{padding:28px 0}
+.section h2{font-size:clamp(1.3rem,2.6vw,1.7rem);font-weight:700;letter-spacing:-.02em;margin-bottom:14px}
+.section p{color:var(--text2)}
+.section p+p{margin-top:12px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-top:8px;font-size:.95rem}
+th,td{padding:14px 16px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--brand-bg);font-family:var(--display);font-weight:600;font-size:.92rem}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;color:var(--text);width:28%}
+.note{margin-top:14px;font-size:.9rem;color:var(--text3)}
+.links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.links a{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:8px 16px;font-size:.9rem;font-weight:500;color:var(--text2)}
+.links a:hover{background:var(--brand-bg);border-color:var(--brand-line);color:var(--brand-ink)}
+.final{margin:36px 0 24px;background:var(--brand-bg);border:1px solid var(--brand-line);border-radius:20px;padding:32px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.final h2{font-size:clamp(1.35rem,2.5vw,1.7rem);font-weight:700;max-width:24ch}
+.final p{margin-top:8px;color:var(--text2);max-width:48ch;font-size:.95rem}
+.footer{margin:48px auto 0;padding:24px 24px 40px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;color:var(--text3);font-size:.88rem;max-width:840px}
+.footer nav{display:flex;flex-wrap:wrap;gap:18px}
+@media(max-width:640px){th:nth-child(2),td:nth-child(2){display:none}}
+</style>
+</head>
+<body>
+<nav class="nav" aria-label="Huvudmeny">
+  <div class="wrap nav-row">
+    <a href="/" class="brand"><img src="/static/logo.png" alt="Provbokning" width="162" height="28"></a>
+    <div class="nav-cta">
+      <a href="/app" class="btn btn-ghost">Prova gratis</a>
+      <a href="/subscribe" class="btn btn-primary">Aktivera live <span class="arr" aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <header class="hero">
+    <span class="kicker">Jämförelse</span>
+    <h1>Manuell <span class="muted">F5</span> vs automatisk <span class="muted">bevakning</span>.</h1>
+    <p class="lead">Många sitter och uppdaterar Trafikverkets sida i hopp om en avbokning. Det tar tid och du missar tider som dyker upp när du inte tittar. Automatisk bevakning tar över sökandet — vi meddelar dig, du bokar själv med BankID.</p>
+    <div class="cta-row">
+      <a href="/app" class="btn btn-primary btn-lg">Prova gratis <span class="arr" aria-hidden="true">→</span></a>
+      <a href="/subscribe" class="btn btn-ghost btn-lg">Aktivera live — 249 kr/mån</a>
+    </div>
+  </header>
+
+  <section class="section" aria-labelledby="cmp">
+    <h2 id="cmp">Sidan om sidan</h2>
+    <table>
+      <thead>
+        <tr><th>Aspekt</th><th>Manuell F5</th><th>Automatisk bevakning</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Vem söker?</td><td>Du, när du har tid och ork</td><td>Vår server, dygnet runt</td></tr>
+        <tr><td>När får du veta?</td><td>Bara om du råkar vara inne då</td><td>Notis via SMS, e-post och webb</td></tr>
+        <tr><td>Flera orter</td><td>Kräver att du kollar varje ort</td><td>Sök parallellt på flera orter</td></tr>
+        <tr><td>Bokning</td><td>Du bokar med BankID</td><td>Du bokar med BankID — vi bokar inte åt dig</td></tr>
+        <tr><td>Kostnad</td><td>Din tid</td><td>249 kr/mån, ingen bindningstid</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Ingen tjänst kan lova exakt hur snabbt en tid dyker upp. Avbokningar är oregelbundna. Vi lovar bevakning och notis — inte en garanterad tid inom ett visst antal dagar.</p>
+  </section>
+
+  <section class="section">
+    <h2>Vad Provbokning gör (och inte gör)</h2>
+    <p><strong>Vi gör:</strong> bevakar Trafikverket enligt dina filter och meddelar dig när något matchar.</p>
+    <p><strong>Du gör:</strong> loggar in med BankID och slutför bokningen hos Trafikverket.</p>
+    <p>Demo på <a href="/app" style="text-decoration:underline">/app</a> är gratis. Live aktiveras via <a href="/subscribe" style="text-decoration:underline">/subscribe</a> för 249 kr/mån via Stripe, utan bindningstid.</p>
+  </section>
+
+  <section class="section">
+    <h2>Orter</h2>
+    <div class="links">
+      <a href="/stockholm">Stockholm</a>
+      <a href="/goteborg">Göteborg</a>
+      <a href="/malmo">Malmö</a>
+      <a href="/">Startsida</a>
+    </div>
+  </section>
+
+  <section class="final">
+    <div>
+      <h2>Sluta sitta och trycka F5.</h2>
+      <p>Prova appen gratis. Aktivera live när du vill ha notiser dygnet runt — du bokar alltid själv med BankID.</p>
+    </div>
+    <div class="cta-row">
+      <a href="/app" class="btn btn-primary btn-lg">Prova gratis <span class="arr" aria-hidden="true">→</span></a>
+      <a href="/subscribe" class="btn btn-ghost btn-lg">Aktivera live</a>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div>© 2026 Provbokningsbevakning</div>
+  <nav aria-label="Sidfot">
+    <a href="/">Startsida</a>
+    <a href="/subscribe">Anmäl dig</a>
+    <a href="/app">Öppna appen</a>
+    <a href="/privacy">Integritetspolicy</a>
+  </nav>
+</footer>
+</body>
+</html>

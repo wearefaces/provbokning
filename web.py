@@ -1079,6 +1079,112 @@ def privacy():
     return render_template("privacy.html", updated=date.today().isoformat())
 
 
+
+# ── SEO city / comparison landing pages (Experiment 2) ──
+
+_SEO_CITY_PAGES = {
+    "stockholm": {
+        "path": "/stockholm",
+        "city": "Stockholm",
+        "title": "Lediga uppkörningstider Stockholm | Provbokning",
+        "og_title": "Lediga uppkörningstider Stockholm",
+        "description": "Bevaka lediga körprov och uppkörningstider i Stockholm. Vi meddelar dig — du bokar med BankID hos Trafikverket. 249 kr/mån, ingen bindningstid. Prova gratis.",
+        "kicker": "Stockholm & närliggande orter",
+        "h1_html": 'Lediga <span class="muted">uppkörningstider</span> i Stockholm.',
+        "lead": "I Stockholm är efterfrågan hög och avbokade tider försvinner fort. Provbokning bevakar Trafikverket dygnet runt och meddelar dig — du bokar själv med BankID. Prova gratis i demoläge, aktivera live när du vill ha notiser.",
+        "problem_h2": "Varför är det svårt i Stockholm?",
+        "problem_paras": [
+            "Stockholmsområdet har många provorter och hög konkurrens om tider. När någon avbokar kan platsen vara borta innan du hunnit uppdatera sidan.",
+            "Manuell F5-jakt tar tid och fungerar bara när du sitter och tittar. Automatisk bevakning söker även när du sover eller jobbar — du får en notis och bokar med BankID.",
+        ],
+        "faq": [
+            {"q": "Vilka orter i Stockholm kan jag bevaka?", "a": "Du väljer bland Trafikverkets provorter i appen — till exempel tätorter i Stockholmsområdet och andra orter du kan tänka dig att åka till. Fler orter ger fler chanser."},
+            {"q": "Bokar ni tiden åt mig?", "a": "Nej. Vi meddelar dig när en match hittas. Du loggar in med BankID mot Trafikverket och slutför bokningen själv."},
+            {"q": "Vad kostar det?", "a": "249 kr/mån via Stripe. Ingen bindningstid. Demo på /app är gratis; live aktiveras via /subscribe."},
+            {"q": "Hur snabbt hittar ni en tid i Stockholm?", "a": "Det går inte att lova. Avbokningar dyker upp oregelbundet. Vi bevakar och meddelar så fort en tid matchar dina filter — hur snabbt det går beror på efterfrågan och hur flexibel du är."},
+        ],
+        "related": [
+            {"href": "/goteborg", "label": "Göteborg"},
+            {"href": "/malmo", "label": "Malmö"},
+        ],
+    },
+    "goteborg": {
+        "path": "/goteborg",
+        "city": "Göteborg",
+        "title": "Lediga uppkörningstider Göteborg | Provbokning",
+        "og_title": "Lediga uppkörningstider Göteborg",
+        "description": "Bevaka lediga körprov och uppkörningstider i Göteborg. Vi meddelar dig — du bokar med BankID hos Trafikverket. 249 kr/mån, ingen bindningstid. Prova gratis.",
+        "kicker": "Göteborg & Västsverige",
+        "h1_html": 'Lediga <span class="muted">uppkörningstider</span> i Göteborg.',
+        "lead": "I Göteborg och omkringliggande orter tar lediga körprovstider slut snabbt. Vi bevakar Trafikverket åt dig och skickar notis — du bokar själv med BankID. Prova appen gratis, aktivera live för 249 kr/mån utan bindningstid.",
+        "problem_h2": "Varför är det svårt i Göteborg?",
+        "problem_paras": [
+            "Många sökande i Västsverige jagar samma luckor. En avbokning kan synas bara en kort stund innan någon annan tar den.",
+            "I stället för att sitta och uppdatera Trafikverkets sida kan du låta bevakningen köra i bakgrunden. När något matchar dina filter får du SMS, e-post eller webbnotis.",
+        ],
+        "faq": [
+            {"q": "Kan jag bevaka Göteborg plus andra orter?", "a": "Ja. Välj så många orter du vill i appen. Ju fler orter, desto fler möjliga träffar."},
+            {"q": "Behöver jag ha datorn igång?", "a": "Nej. Bevakningen körs på vår server. Du får notis även om appen är stängd."},
+            {"q": "Är inloggningen säker?", "a": "Du autentiserar dig direkt mot Trafikverket via BankID. Vi sparar inga lösenord."},
+            {"q": "Finns det bindningstid?", "a": "Nej. 249 kr/mån via Stripe. Avsluta när du vill."},
+        ],
+        "related": [
+            {"href": "/stockholm", "label": "Stockholm"},
+            {"href": "/malmo", "label": "Malmö"},
+        ],
+    },
+    "malmo": {
+        "path": "/malmo",
+        "city": "Malmö",
+        "title": "Lediga uppkörningstider Malmö | Provbokning",
+        "og_title": "Lediga uppkörningstider Malmö",
+        "description": "Bevaka lediga körprov och uppkörningstider i Malmö. Vi meddelar dig — du bokar med BankID hos Trafikverket. 249 kr/mån, ingen bindningstid. Prova gratis.",
+        "kicker": "Malmö & Skåne",
+        "h1_html": 'Lediga <span class="muted">uppkörningstider</span> i Malmö.',
+        "lead": "I Malmö och Skåne är det ofta hård kamp om lediga körprovstider. Provbokning bevakar Trafikverket och meddelar dig — du bokar själv med BankID. Prova gratis i demoläge; live kostar 249 kr/mån utan bindningstid.",
+        "problem_h2": "Varför är det svårt i Malmö?",
+        "problem_paras": [
+            "Skåne har flera populära provorter. När en tid släpps eller avbokas kan den försvinna innan du hunnit öppna sidan igen.",
+            "Automatisk bevakning minskar behovet av manuell F5. Du ställer in filter en gång; vi söker vidare och säger till när något dyker upp.",
+        ],
+        "faq": [
+            {"q": "Vilka provtyper stöds?", "a": "Körprov (uppkörning) och kunskapsprov, för behörigheter som B och MC (A, A1, A2) — du väljer i appen."},
+            {"q": "Bokar ni åt mig?", "a": "Nej. Alert-first: vi meddelar, du bokar med BankID hos Trafikverket."},
+            {"q": "Vad ingår för 249 kr/mån?", "a": "Automatisk bevakning, notiser via SMS/e-post/webb, och möjlighet att söka på flera orter. Ingen bindningstid."},
+            {"q": "Kan jag testa innan jag betalar?", "a": "Ja. Demo på /app är gratis. Live aktiveras via /subscribe när du vill ha automatiska notiser."},
+        ],
+        "related": [
+            {"href": "/stockholm", "label": "Stockholm"},
+            {"href": "/goteborg", "label": "Göteborg"},
+        ],
+    },
+}
+
+
+@app.route("/stockholm")
+@app.route("/stockholm/")
+def seo_stockholm():
+    return render_template("seo_city.html", page=_SEO_CITY_PAGES["stockholm"])
+
+
+@app.route("/goteborg")
+@app.route("/goteborg/")
+def seo_goteborg():
+    return render_template("seo_city.html", page=_SEO_CITY_PAGES["goteborg"])
+
+
+@app.route("/malmo")
+@app.route("/malmo/")
+def seo_malmo():
+    return render_template("seo_city.html", page=_SEO_CITY_PAGES["malmo"])
+
+
+@app.route("/bevakning-vs-f5")
+@app.route("/bevakning-vs-f5/")
+def seo_bevakning_vs_f5():
+    return render_template("bevakning_vs_f5.html")
+
+
 @app.route("/app")
 def app_page():
     config = load_config()
@@ -1145,7 +1251,7 @@ def robots_txt():
 @app.route("/sitemap.xml")
 def sitemap_xml():
     base = SITE_URL
-    urls = ["/", "/subscribe", "/privacy"]
+    urls = ["/", "/subscribe", "/privacy", "/stockholm", "/goteborg", "/malmo", "/bevakning-vs-f5"]
     items = "".join(
         f"<url><loc>{base}{u}</loc><changefreq>weekly</changefreq>"
         f"<priority>{'1.0' if u == '/' else '0.8'}</priority></url>"
